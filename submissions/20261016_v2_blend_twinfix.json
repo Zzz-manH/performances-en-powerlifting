@@ -1,0 +1,43 @@
+{
+ "source": "outputs_v2（10 折 × 种子，NNLS 融合）+ 训练集双胞胎后处理；无训练",
+ "v2_single_model_oof_rmse": {
+  "lgb": 78.189,
+  "xgb": 78.432,
+  "catboost": 78.093,
+  "mlp": 78.395
+ },
+ "v2_nnls_weights": {
+  "lgb": 0.1361,
+  "xgb": 0.2234,
+  "catboost": 0.3876,
+  "mlp": 0.2535
+ },
+ "v2_blend_oof_rmse": 77.302,
+ "alpha": {
+  "exact": 0.86,
+  "core": 0.576
+ },
+ "train_rows_by_level": {
+  "exact": 1109,
+  "core": 100
+ },
+ "exact_twins_identical_target_share": 0.734,
+ "rmse_on_twin_rows_before_after": {
+  "exact": [
+   68.52,
+   35.78
+  ],
+  "core": [
+   69.98,
+   55.7
+  ]
+ },
+ "oof_rmse_after_in_sample_alpha": 77.057,
+ "oof_rmse_after_crossfit_alpha": 77.06,
+ "test_rows_by_level": {
+  "exact": 465,
+  "core": 54
+ },
+ "test_mean_abs_change_on_twin_rows": 46.06,
+ "output": "submissions/20261016_v2_blend_twinfix.csv"
+}

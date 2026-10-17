@@ -1,0 +1,77 @@
+def load_oof(model, variant):
+    """五折都完成时返回 (OOF, 五折平均测试预测)，否则 None。"""
+    oof, test_pred = np.full(n_train, np.nan), np.zeros(len(test))
+    for fold in range(1, N_FOLDS + 1):
+        path = OUTPUT_DIR / f'{model}__{variant}__fold{fold}.npz'
+        if not path.is_file():
+            return None
+        saved = np.load(path)
+        oof[saved['valid_idx']] = saved['val']
+        test_pred += saved['test'] / N_FOLDS
+    require(not np.isnan(oof).any(), f'{model} {variant} 的 OOF 不完整')
+    return oof, test_pred
+
+
+def fold_rmse(pred):
+    return pd.Series({k: rmse(y[FOLD_IDS == k], pred[FOLD_IDS == k]) for k in range(1, N_FOLDS + 1)})
+
+
+def paired_table(preds, base='R2'):
+    require(base in preds, f'缺少基线 {base}')
+    base_folds = fold_rmse(preds[base])
+    rows = []
+    for name, pred in preds.items():
+        delta = fold_rmse(pred) - base_folds
+        rows.append({'variant': name, 'oof_rmse': rmse(y, pred), 'mean_delta': delta.mean(),
+                     'folds_better': int((delta < 0).sum()), **{f'd_fold{k}': v for k, v in delta.items()}})
+    table = pd.DataFrame(rows).set_index('variant')
+    table['keep'] = (table['mean_delta'] <= KEEP_DELTA) & (table['folds_better'] >= 4)
+    table.loc[base, 'keep'] = False
+    return table.sort_values('oof_rmse')
+
+
+def blend_variant(variant):
+    """三模型 NNLS 融合；某模型在该变体上特征不变时用它的 R2 结果。"""
+    loaded = []
+    for model in MODELS:
+        item = load_oof(model, variant if runs(model, variant) else 'R2')
+        if item is None:
+            return None
+        loaded.append(item)
+    P_oof = np.column_stack([o for o, _ in loaded])
+    P_test = np.column_stack([t for _, t in loaded])
+    w, _ = nnls(P_oof, y)
+    return {'oof': P_oof @ w, 'test': P_test @ w, 'weights': [round(float(v), 3) for v in w]}
+
+
+results = pd.DataFrame([json.loads(p.read_text(encoding='utf-8')) for p in sorted(OUTPUT_DIR.glob('*__fold*.json'))])
+for model in MODELS:
+    preds = {}
+    for variant in VARIANTS3:
+        item = load_oof(model, variant) if runs(model, variant) else None
+        if item is not None:
+            preds[variant] = item[0]
+    if 'R2' in preds:
+        table = paired_table(preds)
+        part = results[results['model'] == model].groupby('variant')
+        table['mean_best_iter'] = part['best_iteration'].mean()
+        table['minutes'] = part['seconds'].sum() / 60
+        print(f'\n=== {model}')
+        display(table.round(3))
+        table.to_csv(OUTPUT_DIR / f'summary_single_{model}.csv')
+
+BLENDS = {}
+for variant in VARIANTS3:
+    item = blend_variant(variant)
+    if item is not None:
+        BLENDS[variant] = item
+require('R2' in BLENDS, '三模型的 R2 还没有全部完成')
+blend_table = paired_table({v: b['oof'] for v, b in BLENDS.items()})
+blend_table['weights_lgb_xgb_cb'] = [str(BLENDS[v]['weights']) for v in blend_table.index]
+print('\n=== 三模型 NNLS 融合（主要判读依据）')
+display(blend_table.round(3))
+blend_table.to_csv(OUTPUT_DIR / 'summary_blend_screen.csv')
+
+KEPT = [v for v in ['H2', 'E', 'PM'] if v in blend_table.index and bool(blend_table.loc[v, 'keep'])]
+VARIANTS3['ALL3'] = KEPT
+print('达标的新块：', KEPT or '无', '→ ALL3 = R2 +', KEPT)

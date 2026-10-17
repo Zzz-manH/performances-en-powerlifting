@@ -462,6 +462,13 @@ nb01 = [
     '''),
     code(PRECISION),
     md('''
+    **从上表看**：
+    - USAPL 有 79% 的年龄是 x.5：整数年龄的平均总成绩 498 kg，x.5 年龄 455 kg；FPR 中两者是 554 与 491 kg。
+    - USPA 完全不用 x.5，THSPA 的体重 89% 记到两位小数。
+
+    同一个数值（例如 25 岁）在不同记录习惯下含义不同，这些差异部分来自不同的选手群体。模型需要显式的精度特征才能利用它们。
+    '''),
+    md('''
     ## 6. 训练集里的「双胞胎」
 
     约 1% 的训练行在训练集中有 16 个特征完全相同的另一行（exact），其中约四分之三的 TotalKg 也完全相同：同一次成绩被登记在多个组别里。测试集里也有这样的行。树模型不会记住单独的一行，所以 04 在模型之后把这些行的预测拉向双胞胎的真实成绩（双胞胎后处理），公开榜上稳定改善约 0.2 kg。core 表示只有核心 9 列（年龄、体重、年份、性别、联盟、比赛国、比赛州、国籍、州）相同。
@@ -477,9 +484,12 @@ nb01 = [
     code(QUALITY),
     md('''
     **结论**：
-    - id 的顺序是随机的，不含比赛结构，不作为特征。
-    - 疑似行只占约 0.25%，保留：05 的实验表明删掉它们反而变差。
-    - 训练集与测试集的分布见对抗验证 AUC；02 中每个特征块的训练 / 测试均值也几乎相同。
+    - **训练集与测试集分布一致**：对抗验证 AUC 0.502，02 中每个特征块的训练 / 测试均值也几乎相同，所以交叉验证可以代表测试集。
+    - **id 的顺序是随机的**：
+      - 按 id 排序后，相邻两行同一场比赛、同一联盟、同一年份、同一国家的比例都是随机顺序的 0.97–1.02 倍；
+      - id 与 TotalKg 的相关为 −0.003；训练和测试的 id 交错分布。
+      - 因此不作为特征。
+    - **疑似行保留**：共 265 行（0.25%），05 的实验表明删掉它们反而变差。
     '''),
     md('''
     ## 8. 固定五折
@@ -1191,7 +1201,7 @@ leaderboard = pd.DataFrame([
     ('12', '全量重训共 8 个种子', np.nan, 76.359),
     ('12', '+ TabM 95% 重训 × 3 种子', np.nan, 76.337),
     ('13', 'v3_plus：+ sklearn HGB', 76.010, 76.334),
-    ('15', 'v4：8 个模型（+ cb_gl、HGB 三种子，TabM 重训 5 个种子）', 75.966, np.nan),
+    ('15', 'v4：8 个模型（+ cb_gl、HGB 三种子，TabM 重训 5 个种子）', 75.966, 76.298),
 ], columns=['实验', '提交', 'CV（嵌套融合 + 交叉拟合第二层）', '公开榜'])
 display(leaderboard.set_index('实验'))
 '''
@@ -1200,7 +1210,7 @@ nb04 = [
     md('''
     # 04 · 最终模型与提交
 
-    **最终方案**（实验 15，提交文件 `submission_final_v4_final.csv`，五折交叉验证 75.966）：
+    **最终方案**（实验 15，提交文件 `submission_final_v4_final.csv`）：五折交叉验证 **75.966**，公开榜 **76.298**，两者都是全部提交中最好的；2026-10-17 时公开榜第 1。
 
     | 步骤 | 内容 |
     |---|---|
@@ -1305,10 +1315,10 @@ nb04 = [
     md('''
     **Kaggle 最终选择两个提交**（私榜按另外 70% 的测试数据计算）：
 
-    1. `artifacts/04_final_model/v4_eight_models/submission_final_v4_final.csv`：交叉验证最好，主选；
-    2. `artifacts/03_model_selection/model_compare/submission_final_v3_plus_final.csv`：公开榜最好（76.334），作保险。
+    1. `artifacts/04_final_model/v4_eight_models/submission_final_v4_final.csv`：交叉验证与公开榜都最好（75.966 / 76.298），主选；
+    2. `artifacts/03_model_selection/model_compare/submission_final_v3_plus_final.csv`：公开榜第二好（76.334），作保险。
 
-    如果 v4 在公开榜上比 76.334 差 0.05 以上，改选 v3_plus 和 `artifacts/04_final_model/v2_more_seeds/submission_final_v2_seeds_tabmfull_final.csv`。三个文件的副本都在 `submissions/`。
+    v4 在公开榜上比 v3_plus 好 0.036，与交叉验证上的 0.045 一致。05 的模拟显示，这样的差异在公开榜上反过来的概率只有约 4%。两个文件的副本都在 `submissions/`。
     '''),
 ]
 
@@ -1477,13 +1487,14 @@ def leaderboard_analysis():
         ('v2 + twins + athlete', 76.774, 77.125), ('10 ALL3 + twins', 76.649, 76.884),
         ('10 + S0', 76.539, 76.775), ('10 + S3', 76.510, 76.716), ('11 fold average', 76.044, 76.520),
         ('13 v3_plus', 76.010, 76.334), ('14 R3', 76.361, 76.592), ('14 AS', 76.508, 76.802),
+        ('15 v4 (final)', 75.966, 76.298),
     ], columns=['submission', 'cv', 'public'])
     history['public - cv'] = history['public'] - history['cv']
     display(history.set_index('submission').round(3))
-    early = history['submission'].isin(['v1', 'v2', 'v2 + twins'])
+    early = history['submission'].isin(['v1', 'v2', 'v2 + twins', 'v2 + twins + athlete'])   # 外层折早停
     fig, ax = plt.subplots(figsize=(6.5, 5))
     ax.scatter(history.loc[~early, 'cv'], history.loc[~early, 'public'], color='#4c72b0', label='inner early stopping (07+)')
-    ax.scatter(history.loc[early, 'cv'], history.loc[early, 'public'], color='#c44e52', label='outer-fold early stopping (v1, v2)')
+    ax.scatter(history.loc[early, 'cv'], history.loc[early, 'public'], color='#c44e52', label='outer-fold early stopping (v1, v2-based)')
     for _, row in history.iterrows():
         ax.annotate(row['submission'], (row['cv'], row['public']), fontsize=7, xytext=(3, 3), textcoords='offset points')
     lims = [history[['cv', 'public']].min().min() - 0.1, history[['cv', 'public']].max().max() + 0.1]
@@ -1509,12 +1520,15 @@ def public_noise():
         single.append(b)
         diff.append(b - a)
     diff = np.array(diff)
+    public_gap = 76.298 - 76.334                       # 实际公开榜：v4 76.298，v3_plus 76.334
     print(f'全部 105,000 行：v4 {rmse(y, v4):.3f}，v3_plus {rmse(y, v3):.3f}，差 {rmse(y, v4) - rmse(y, v3):+.3f}')
     print(f'随机 13,500 行：单个提交的 RMSE 标准差 {np.std(single):.3f}；两者之差的标准差 {np.std(diff):.3f}；'
           f'公开榜上 v4 反而显示更差的概率 {np.mean(diff > 0):.0%}')
+    print(f'实际公开榜：v4 比 v3_plus {public_gap:+.3f}')
     fig, ax = plt.subplots(figsize=(6.5, 3.4))
     ax.hist(diff, bins=40, color='#4c72b0')
     ax.axvline(rmse(y, v4) - rmse(y, v3), color='black', ls='--', label='difference on all rows')
+    ax.axvline(public_gap, color='#dd8452', lw=1.5, label='actual public leaderboard')
     ax.axvline(0, color='#c44e52', lw=1)
     ax.set_xlabel('RMSE(v4) - RMSE(v3_plus) on 13.5k random rows (kg)')
     ax.set_title('How noisy is a 30% public leaderboard?')
@@ -1555,13 +1569,25 @@ nb05 = [
     code(RESIDUALS),
     md('''
     **怎么读**：
-    - 某个分组的残差均值明显不为 0，说明模型在这个方向上有系统偏差、特征可能漏掉了信号；接近 0 则说明已经校准。第三轮的残差诊断（02）中，剩下的分组偏差多在 2 kg 以内。
-    - 大误差集中在少数极端行，多为失败或不完整的比赛记录，例如 216 kg 体重的选手总成绩 155 kg。它们无法从特征识别，也不能删掉（第 3 节）。
+    - **大多数分组的残差均值在 ±1.5 kg 以内**，模型在这些方向上已经校准。偏差较大的都是小分组或极端分组：
+      - 女子多层装备（380 行）+4.3；
+      - 体重 ≥ 140 kg +3.9；
+      - 60 岁以上 −2.5；
+      - 只出现一次的运动员 −1.3。
+
+      Mx 只有 9 行。
+    - **误差大小差别很大**：女子无装备 RMSE 54 kg，男子多层装备 111 kg；体重越大越难预测。
+    - **大误差集中在少数极端行**：|残差| > 150 kg 的 5.3% 行占总平方误差的 36%，多为失败或不完整的比赛记录，例如 216 kg 体重的选手总成绩 155 kg。它们无法从特征识别，也不能删掉（第 3 节）。
     '''),
     md('''
     ## 2. 残差的结构：同一运动员、双胞胎 → 第二层
 
-    特征描述不了个人训练水平，但训练集里常有**同一个人**的其他成绩。下表是「同一键内其他行的平均残差」与本行残差的相关（留一）。相关大于 0，说明可以借用这个人其他记录的残差来修正预测：早期在 v2 的残差上，运动员键的相关约 0.095，比赛键约 0.044。比较融合后与加第二层后的两列，可以看到第二层用掉了多少这样的信息。
+    特征描述不了个人训练水平，但训练集里常有**同一个人**的其他成绩。下表是「同一键内其他行的平均残差」与本行残差的相关（留一）。相关大于 0，说明可以借用这个人其他记录的残差来修正预测。
+
+    - 早期 v2 的残差上，运动员键的相关约 0.095。
+    - 最终融合中，H、H2 特征已经吸收了一部分，降到约 0.045。
+    - 加第二层之后降到约 0，同一运动员的信息基本用完。
+    - 比赛键本来就接近 0（−0.008）。加第二层后为 0.037：第二层里的比赛项在交叉拟合下带来了少量同场比赛的相关，影响很小。
     '''),
     code(ATHLETE_CORR),
     md('''
@@ -1618,6 +1644,12 @@ nb05 = [
     '''),
     code(LEADERBOARD),
     md('''
+    **结论**：
+    - **排序可信**：实验 07 起（内层早停），公开榜与交叉验证的排序相关 0.97。公开榜一致地比交叉验证高，大多高 0.2–0.3 kg，实验 11 的折平均版高 0.48；用外层折早停的 v2 系列高 0.35–0.54。
+    - **偏移来自公开榜那 30% 行**：在随机 13,500 行上，单个提交的 RMSE 标准差约 0.59 kg，而两个相近提交之差的标准差只有约 0.03 kg。公开榜对所有提交都用同一批行，所以它们共享同一个偏移。比较两个提交时，看差值是可靠的，看绝对值则不可靠。
+    - **最终两个候选**：v4 在交叉验证上比 v3_plus 好 0.045，模拟中在公开榜上反过来的概率约 4%；实际公开榜上 v4 好 0.036，与预期一致。
+    '''),
+    md('''
     ## 6. 结论
 
     - **最有效的方向**：
@@ -1626,7 +1658,8 @@ nb05 = [
       - 多种子与全量重训。
     - **相对力量目标**：DOTS、IPF GL 的 CatBoost 是最强的单模型，与 kg 目标的模型互补。
     - **饱和**：不看成绩的特征到第三轮基本饱和；基于成绩的特征放进模型反而变差，放在模型之后的平滑里效果更好。
-    - **选模**：公开榜只有 30% 的测试数据，噪声与很多改进的幅度相当，所以选模以五折交叉验证为准。
+    - **选模**：公开榜只有 30% 的测试数据，所以选模以五折交叉验证和同协议的配对比较为准；公开榜只作确认，两者的排序一致。
+    - **最终结果**：v4 的五折交叉验证 75.966，公开榜 76.298（2026-10-17 公开榜第 1）。起点 v1 的交叉验证为 77.775，公开榜 78.0。
     '''),
 ]
 

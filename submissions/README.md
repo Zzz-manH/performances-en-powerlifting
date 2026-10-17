@@ -6,11 +6,11 @@
 
 |文件|模型|CV RMSE|公开榜|
 |---|---|---:|---:|
-|**`20261017_FINAL_v4_eight_models.csv`**|**最终主选**。实验 15：8 个模型（LightGBM、XGBoost、CatBoost、lgb_rel、cb_rel、cb_gl、TabM、sklearn HGB）× 3 种子，树模型全量重训，NNLS + 双胞胎 + S3 平滑|**75.966**|待提交|
-|`20261017_v3_plus.csv`|备选。实验 13：实验 12 的全部改进 + sklearn HGB|76.010|**76.334**|
+|**`20261017_FINAL_v4_eight_models.csv`**|**最终主选**。实验 15：8 个模型（LightGBM、XGBoost、CatBoost、lgb_rel、cb_rel、cb_gl、TabM、sklearn HGB）× 3 种子，树模型全量重训，NNLS + 双胞胎 + S3 平滑|**75.966**|**76.298**|
+|`20261017_v3_plus.csv`|备选。实验 13：实验 12 的全部改进 + sklearn HGB|76.010|76.334|
 |`20261017_v2_seeds_tabmfull.csv`|后备。实验 12：6 个模型，全量重训 8 个种子 + TabM 95% 重训|—|76.337|
 
-**平台上勾选（Select）**：`20261017_FINAL_v4_eight_models.csv` 和 `20261017_v3_plus.csv`。如果 v4 在公开榜上比 76.334 差 0.05 以上，改选 v3_plus 和 `20261017_v2_seeds_tabmfull.csv`。
+**平台上勾选（Select）**：`20261017_FINAL_v4_eight_models.csv` 和 `20261017_v3_plus.csv`。v4 在交叉验证和公开榜上都最好：76.298，2026-10-17 公开榜第 1。
 
 三个文件分别是 `artifacts/04_final_model/v4_eight_models/submission_final_v4_final.csv`、`artifacts/03_model_selection/model_compare/submission_final_v3_plus_final.csv`、`artifacts/04_final_model/v2_more_seeds/submission_final_v2_seeds_tabmfull_final.csv` 的副本。
 
@@ -39,9 +39,9 @@
 |2026-10-16|同上，树模型全量重训 × 3 种子（TabM 折平均）|11|—|76.360|
 |2026-10-17|全量重训共 8 个种子，TabM 折平均|12|—|76.359|
 |2026-10-17|同上 + TabM 95% 重训 × 3 种子（v2_seeds_tabmfull）|12|—|76.337|
-|2026-10-17|**v3_plus：+ sklearn HGB**|13|76.010|**76.334**|
+|2026-10-17|v3_plus：+ sklearn HGB|13|76.010|76.334|
 |2026-10-17|三模型 R3 + 双胞胎 + S3（对照）|14|76.361|76.592|
 |2026-10-17|加运动员实力嵌套特征（变差）|14|76.508|76.802|
-|2026-10-17|**v4：8 个模型 + 双胞胎 + S3**|15|**75.966**|待提交|
+|2026-10-17|**v4：8 个模型 + 双胞胎 + S3**|15|**75.966**|**76.298**|
 
 「—」：全量重训的版本没有对应的 CV（全部训练行都用于训练）。各实验的提交文件在 `artifacts/` 中的位置见 [README.md](../README.md) 的「原实验编号对照」。

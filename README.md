@@ -2,7 +2,7 @@
 
 根据比赛记录预测力量举选手的三项总成绩 `TotalKg`（kg），评估指标 RMSE（越低越好）。训练集 105,000 行、测试集 45,000 行，16 个特征（3 数值 + 13 类别）。
 
-**最终提交**：[submissions/20261017_FINAL_v4_eight_models.csv](submissions/20261017_FINAL_v4_eight_models.csv)，五折交叉验证 **75.966**。公开榜目前最好的是 v3_plus，**76.334**；起点 v1 是 78.0。全部实验数字见 [RESULTS.md](RESULTS.md)，提交记录见 [submissions/README.md](submissions/README.md)。
+**最终提交**：[submissions/20261017_FINAL_v4_eight_models.csv](submissions/20261017_FINAL_v4_eight_models.csv)，五折交叉验证 **75.966**，公开榜 **76.298**（2026-10-17 公开榜第 1；起点 v1 是 78.0）。全部实验数字见 [RESULTS.md](RESULTS.md)，提交记录见 [submissions/README.md](submissions/README.md)。
 
 ## 5 本 notebook
 

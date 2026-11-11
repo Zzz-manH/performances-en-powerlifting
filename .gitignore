@@ -1,10 +1,10 @@
-# 竞赛原始数据（不放在仓库中，从 Kaggle 下载，见 README）
+# Données de la compétition : à télécharger depuis Kaggle (voir README)
 data/
 
-# 实验结果与模型（约 400MB，可由 notebook 重新生成；完整副本保存在 Google Drive）
+# Prédictions et résultats sauvegardés (environ 470 Mo), hors dépôt
 artifacts/
 
-# 系统、编辑器与临时文件
+# Fichiers système et temporaires
 .DS_Store
 __pycache__/
 .ipynb_checkpoints/

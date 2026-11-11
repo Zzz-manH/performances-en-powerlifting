@@ -14,7 +14,7 @@ La RMSE va de 54 kg pour les femmes en Raw à 111 kg pour les hommes en Multi-pl
 <!-- cellule -->
 ## 2. Structure des résidus et corrections
 
-Les variables ne disent pas le niveau de quelqu'un, mais l'apprentissage contient souvent d'autres résultats de la même personne. Pour le voir, on corrèle le résidu d'une ligne avec le résidu moyen des autres lignes de la même clé. Cette corrélation vaut environ 0.095 pour la version v2, 0.045 une fois les variables d'historique et de carrière ajoutées, et à peu près 0 après les corrections.
+Les variables ne disent pas le niveau de quelqu'un, mais l'apprentissage contient souvent d'autres résultats de la même personne. Pour le voir, on corrèle le résidu d'une ligne avec le résidu moyen des autres lignes de la même clé. Avec les clés du tableau, cette corrélation vaut environ 0.07 pour la version v2, 0.045 pour la combinaison des huit modèles (qui ont les variables d'historique et de carrière), et à peu près 0 après les corrections.
 
 Pour la clé de compétition, elle passe de −0.008 à 0.037 : les corrections laissent une petite corrélation entre lignes d'une même compétition, que le second passage du lissage par paires exploite (notebook 04).
 <!-- cellule -->
@@ -58,7 +58,7 @@ Les trois modèles sont **moins bons de 0.04 à 0.08 kg**, avec au mieux 2 plis 
 
 Toutes les soumissions qui ont un score local sont comparées à leur score public. Ensuite, pour savoir ce que vaut un écart au public, on tire au hasard 13 500 lignes parmi les prédictions hors pli, comme le fait le classement public avec le test.
 <!-- cellule -->
-Depuis l'expérience 07 (early stopping interne), le classement local et le classement public sont presque les mêmes : corrélation de rang 0.97. Le score public est en général 0.2 à 0.3 kg au-dessus du local.
+Depuis l'expérience 07 (early stopping interne), le classement local et le classement public sont presque les mêmes : corrélation de rang 0.98. Le score public est en général 0.2 à 0.3 kg au-dessus du local. L'écart monte à 0.45–0.48 kg avec le lissage par paires : son gain local est plus grand que son gain public.
 
 Dans la simulation, le score d'une soumission varie beaucoup d'un tirage à l'autre (écart-type 0.59 kg), mais la différence entre deux soumissions proches très peu (0.03 kg). Autrement dit, le niveau absolu du score public dépend du tirage, alors que l'écart entre deux soumissions est fiable.
 

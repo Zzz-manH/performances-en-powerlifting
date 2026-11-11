@@ -2,7 +2,7 @@
 
 Projet du Data Challenge d'apprentissage supervisé. Il s'agit de prédire le total des trois mouvements (`TotalKg`, en kg) d'un athlète à partir des informations de sa participation à une compétition. La métrique est la RMSE. Le jeu contient 105 000 lignes d'apprentissage, 45 000 de test et 16 variables (3 numériques, 13 catégorielles).
 
-**Résultat.** Soumission finale : [submissions/20261110_v6_meet_smoothing.csv](submissions/20261110_v6_meet_smoothing.csv), RMSE locale **75.575**, score public **76.030**. Notre première soumission était à 78.0.
+**Résultat.** Soumission finale : [submissions/20261110_v6_meet_smoothing.csv](submissions/20261110_v6_meet_smoothing.csv), RMSE locale **75.575**, score public **76.030**. Notre premier ensemble de modèles était à 78.0.
 
 Le détail des expériences est dans [RESULTS.md](RESULTS.md) et l'historique des soumissions dans [submissions/README.md](submissions/README.md).
 
@@ -40,7 +40,7 @@ Nous n'utilisons aucune donnée externe : la base OpenPowerlifting contient les 
 ## Exécution
 
 - **Lire seulement** : ouvrir les notebooks, les sorties sont déjà là.
-- **Réexécuter sans entraîner** : par défaut tous les boutons `TRAIN` sont à `False` et les notebooks relisent les prédictions sauvegardées dans `artifacts/`. Ce dossier (environ 470 Mo) n'est pas dans le dépôt ; sans lui, il faut réentraîner.
+- **Réexécuter sans entraîner** : par défaut tous les boutons `TRAIN` sont à `False` et les notebooks relisent les prédictions sauvegardées dans `artifacts/`. Ce dossier (environ 470 Mo) n'est pas dans le dépôt. Sans lui, seul le notebook 01 se réexécute entièrement (il n'a besoin que des CSV) ; les notebooks 02 à 04 signalent les fichiers manquants, le 05 s'arrête, et il faut réentraîner pour retrouver les résultats.
 - **Réentraîner** : sur Colab avec un GPU T4, placer le dossier du projet dans `MyDrive/Colab Notebooks/` (ou définir `PL_PROJECT_DIR`), mettre un bouton à `True` et exécuter. Un seul bouton à la fois, en redémarrant le runtime entre deux.
 - **Tout refaire depuis zéro** : dans 04, `six_models` (environ 2 h 30), `more_seeds` (1 h), `eight_models` (1 h), puis `pair_smoothing` (CPU). Les notebooks 02 et 03 ne sont nécessaires que pour refaire les ablations.
 

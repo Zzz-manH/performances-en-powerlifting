@@ -31,7 +31,7 @@ En regardant les valeurs de près, on remarque deux choses :
 
 Un arbre a du mal à retrouver ce genre de motif avec des seuils, donc on en fera des variables (notebook 02). Sur les résidus d'un premier modèle, l'écart entre âges entiers et âges en .5 atteint 24.5 kg à l'USAPL.
 <!-- cellule -->
-À l'USAPL, 79 % des âges sont en .5, avec un total moyen de 455 kg contre 498 kg pour les âges entiers. À la FPR : 491 contre 554 kg. L'USPA ne note jamais d'âge en .5 ; la THSPA garde deux décimales de poids dans 89 % des cas. Ces habitudes de saisie renseignent donc indirectement sur le type de compétition.
+À l'USAPL, 79 % des âges sont en .5, avec un total moyen de 455 kg contre 498 kg pour les âges entiers. À la FPR : 491 contre 554 kg. L'USPA ne note presque jamais d'âge en .5 ; la THSPA garde deux décimales de poids dans 89 % des cas. Ces habitudes de saisie renseignent donc indirectement sur le type de compétition.
 <!-- cellule -->
 ## 6. Lignes « jumelles »
 
@@ -57,4 +57,4 @@ Les 265 lignes suspectes (0.25 %) sont gardées : les retirer dégrade le score 
 
 Les plis viennent de `KFold(5, shuffle=True, random_state=42)`. Toutes les variantes sont comparées sur les mêmes lignes de validation. L'ensemble final ajoute les graines 7 et 2024, qui ont chacune leur propre découpage.
 
-Dans chaque pli, 10 % de la partie d'apprentissage sont mis de côté pour l'early stopping, et le pli de validation ne sert qu'au score. Nos deux premières versions (v1, v2) arrêtaient l'entraînement directement sur le pli de validation : leur score local était trop optimiste, environ 0.5 kg sous le score public pour v2, contre 0.13 à 0.25 kg depuis ce changement.
+Dans chaque pli, 10 % de la partie d'apprentissage sont mis de côté pour l'early stopping, et le pli de validation ne sert qu'au score. Nos deux premières versions (v1, v2) arrêtaient l'entraînement directement sur le pli de validation : leur score local était trop optimiste, environ 0.5 kg sous le score public pour v2, contre 0.13 à 0.26 kg pour les versions qui ont suivi ce changement (expériences 07 à 10).

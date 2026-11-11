@@ -1230,6 +1230,7 @@ def leaderboard_analysis():
         (HISTORY_EXACT_BIRTHYEAR_SMOOTHING, 76.539, 76.775), (HISTORY_COMBINED_RESIDUAL_SMOOTHING, 76.510, 76.716), (HISTORY_SIX_MODEL_FOLD_AVERAGE, 76.044, 76.520),
         (HISTORY_HISTOGRAM_BOOSTING_ENSEMBLE, 76.010, 76.334), (HISTORY_FINAL_FEATURES_REFERENCE, 76.361, 76.592), (HISTORY_ATHLETE_PERFORMANCE, 76.508, 76.802),
         (HISTORY_FINAL_ENSEMBLE, 75.966, 76.298),
+        ('+ paires de sportifs', 75.607, 76.089), ('+ paires dans la compétition (finale)', 75.575, 76.030),
     ], columns=['submission', 'cv', 'public'])
     history['public - cv'] = history['public'] - history['cv']
     display(history.rename(columns={'cv': 'local', 'public - cv': 'public - local'}).set_index('submission').round(3))

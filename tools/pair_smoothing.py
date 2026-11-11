@@ -180,7 +180,7 @@ def crossfit(base, resid, Fm, ridge=0.0):
 
 
 v4_sub = pd.read_csv(V4 / 'submission_final_v4_final.csv')[TARGET].to_numpy()
-rows = [{'variante': 'v4 (huit modèles, lissage par groupes)', 'oof_rmse': REF}]
+rows = [{'variante': 'référence : huit modèles, lissage par groupes', 'oof_rmse': REF}]
 
 
 def record(name, oof, test_pred, ref_oof):

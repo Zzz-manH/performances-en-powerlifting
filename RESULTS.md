@@ -171,6 +171,6 @@ Le seuil fixé avant l'essai était de 0.03 kg. On s'arrête là.
 
 **Résidus de la version à huit modèles** : moins de 1.5 kg d'écart moyen dans la plupart des groupes ; femmes en Multi-ply +4.3 (380 lignes), 140 kg et plus +3.9, plus de 60 ans −2.5. RMSE de 54 kg (femmes en Raw) à 111 kg (hommes en Multi-ply).
 
-**Score local et score public** : corrélation de rang 0.97 depuis l'expérience 07. En tirant 13 500 lignes au hasard parmi les prédictions hors pli, l'écart-type d'un score est de 0.59 kg, celui de la différence entre deux soumissions proches de 0.03 kg.
+**Score local et score public** : corrélation de rang 0.98 depuis l'expérience 07 (lissage par paires compris). L'écart public − local est de 0.13 à 0.33 kg jusqu'aux huit modèles, puis de 0.45 à 0.48 kg avec le lissage par paires. En tirant 13 500 lignes au hasard parmi les prédictions hors pli, l'écart-type d'un score est de 0.59 kg, celui de la différence entre deux soumissions proches de 0.03 kg.
 
 **Ce qui n'a pas marché** : variables tirées des totaux ; target encoding grossier (+0.27) ; fréquences et interactions simples (±0.05) ; TabPFN, forêt aléatoire, ExtraTrees, EBM, Ridge ; NNLS par groupe ; lissage par LightGBM ; retrait des lignes suspectes ; cible log. La base OpenPowerlifting n'est pas utilisée car elle contient les lignes du test.

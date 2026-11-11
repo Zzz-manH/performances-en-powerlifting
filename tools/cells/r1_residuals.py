@@ -1,11 +1,11 @@
 def residual_table(pred):
     res = y - pred
     groups = {
-        'age_half': P['age_half'].iloc[:n_train].to_numpy(),
-        'bw_precision': P['bw_precision'].iloc[:n_train].to_numpy(),
-        'other_state(-1=未知)': T['other_state'].iloc[:n_train].fillna(-1).to_numpy(),
-        'abroad(-1=未知)': T['abroad'].iloc[:n_train].fillna(-1).to_numpy(),
-        'meet_n 八分位': pd.qcut(M['meet_n'].iloc[:n_train], 8, labels=False, duplicates='drop').to_numpy(),
+        'age_half': RECORDING_PRECISION_FEATURES['age_half'].iloc[:n_train].to_numpy(),
+        'bw_precision': RECORDING_PRECISION_FEATURES['bw_precision'].iloc[:n_train].to_numpy(),
+        'other_state(-1=unknown)': TRAVEL_FEATURES['other_state'].iloc[:n_train].fillna(-1).to_numpy(),
+        'abroad(-1=unknown)': TRAVEL_FEATURES['abroad'].iloc[:n_train].fillna(-1).to_numpy(),
+        'meet_n octiles': pd.qcut(MEET_CONTEXT_FEATURES['meet_n'].iloc[:n_train], 8, labels=False, duplicates='drop').to_numpy(),
     }
     frames = []
     for name, key in groups.items():
@@ -15,6 +15,6 @@ def residual_table(pred):
     return pd.concat(frames)
 
 
-check = residual_table(BLENDS['F0']['oof']).rename(columns={'mean': 'F0'})
+check = residual_table(BLENDS[VARIANT_WEIGHT_CLASS_BASELINE]['oof']).rename(columns={'mean': VARIANT_WEIGHT_CLASS_BASELINE})
 check[BEST] = residual_table(BLENDS[BEST]['oof'])['mean']
 display(check.round(2))

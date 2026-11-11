@@ -18,15 +18,15 @@ ALLO = (train['BodyweightKg'].to_numpy(dtype='float64') / 80.0) ** (2 / 3)
 ALLO_TEST = (test['BodyweightKg'].to_numpy(dtype='float64') / 80.0) ** (2 / 3)
 GL = gl_scale(train['Sex'], train['Equipment'], train['BodyweightKg'])
 GL_TEST = gl_scale(test['Sex'], test['Equipment'], test['BodyweightKg'])
-require(min(GL.min(), GL_TEST.min()) > 0 and min(ALLO.min(), ALLO_TEST.min()) > 0, '力量系数异常')
-SCALE_OF = {'cb_rel': (SCALE, SCALE_TEST), 'cb_allo': (ALLO, ALLO_TEST), 'cb_gl': (GL, GL_TEST)}
+require(min(GL.min(), GL_TEST.min()) > 0 and min(ALLO.min(), ALLO_TEST.min()) > 0, 'Invalid performance scale')
+SCALE_OF = {MODEL_CATBOOST_DOTS: (SCALE, SCALE_TEST), MODEL_CATBOOST_ALLOMETRIC: (ALLO, ALLO_TEST), MODEL_CATBOOST_IPF_GL: (GL, GL_TEST)}
 for extra in TARGET_MODELS:
-    FRAMES[extra] = FRAMES['cb_rel']
-    PATIENCE[extra] = PATIENCE['cb_rel']
+    FRAMES[extra] = FRAMES[MODEL_CATBOOST_DOTS]
+    PATIENCE[extra] = PATIENCE[MODEL_CATBOOST_DOTS]
 
 
 def fit_matrix(model, Xtr, Xte, a, s, v, seed=SEED, rounds=MAX_ROUNDS, test_rows=None):
-    """用给定的特征表训练（内层拟合 a、早停 s），返回 (外层验证预测, 测试预测, 最佳轮数)。"""
+    """Fit the supplied features on a, stop on s; return (outer predictions, test predictions, best iteration)."""
     Xt = Xte if test_rows is None else Xte.iloc[test_rows]
     if model in SCALE_OF:
         scale, scale_test = SCALE_OF[model]
@@ -48,14 +48,14 @@ rng = np.random.default_rng(SEED)
 probe = rng.choice(np.flatnonzero(FOLD_IDS != 1), 3000, replace=False)
 pa, ps, pv = probe[:2000], probe[2000:2500], probe[2500:]
 failed = {}
-checks = [(m, v) for v in VARIANTS4 for m in SCREEN_MODELS] + [(m, 'R3') for m in TARGET_MODELS]
+checks = [(m, v) for v in PERFORMANCE_VARIANTS for m in SCREEN_MODELS] + [(m, VARIANT_FINAL_BASELINE) for m in TARGET_MODELS]
 for model, variant in checks:
     try:
-        Xtr, Xte = frames_aug(variant, model, 1)
+        Xtr, Xte = performance_feature_frames(variant, model, 1)
         p_val, p_test, _ = fit_matrix(model, Xtr, Xte, pa, ps, pv, rounds=30, test_rows=np.arange(300))
-        require(np.isfinite(p_val).all() and np.isfinite(p_test).all(), '预测含非有限值')
-        print(f'预检通过：{model:8s} {variant:3s}（{Xtr.shape[1]} 列）RMSE@30轮 {rmse(y[pv], p_val):.1f}')
+        require(np.isfinite(p_val).all() and np.isfinite(p_test).all(), 'Non-finite predictions')
+        print(f'Smoke check passed: {model:8s} {variant:3s}({Xtr.shape[1]} columns)RMSE@30 iterations {rmse(y[pv], p_val):.1f}')
     except Exception as exc:
         failed[(model, variant)] = repr(exc)
-        print(f'预检失败，跳过：{model} {variant} → {exc!r}')
-require(not any(v == 'R3' and m in SCREEN_MODELS for (m, v) in failed), '基线 R3 预检失败，请检查环境')
+        print(f'Smoke check failed, skipping: {model} {variant} → {exc!r}')
+require(not any(v == VARIANT_FINAL_BASELINE and m in SCREEN_MODELS for (m, v) in failed), 'Échec du contrôle des variables finales ; vérifier l’environnement')

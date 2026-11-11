@@ -1,51 +1,47 @@
-# 提交文件与记录
+# Soumissions
 
-公开榜只用约 30% 的测试数据（约 13,500 行），0.05 kg 以内的差异基本是噪声（见 [05_error_analysis](../05_error_analysis.ipynb)）。选模以五折交叉验证为准，公开榜只作确认。
+Le score public porte sur environ 30 % du test (13 500 lignes). Nous choisissons les versions sur le score local ; le public sert à confirmer.
 
-## 保留的文件
+## Fichiers gardés
 
-|文件|模型|CV RMSE|公开榜|
+| Fichier | Contenu | RMSE locale | Score public |
 |---|---|---:|---:|
-|**`20261110_v6_meet_smoothing.csv`**|**最终主选**。实验 17：v4 + 运动员成对平滑 + 比赛层成对平滑|**75.575**|**76.030**|
-|`20261110_v5_pair_smoothing.csv`|实验 16：v4 + 运动员成对平滑|75.607|76.089|
-|`20261017_FINAL_v4_eight_models.csv`|成对平滑之前的版本，作保险。实验 15：8 个模型（LightGBM、XGBoost、CatBoost、lgb_rel、cb_rel、cb_gl、TabM、sklearn HGB）× 3 种子，树模型全量重训，NNLS + 双胞胎 + S3 平滑|75.966|76.298|
-|`20261017_v3_plus.csv`|备选。实验 13：实验 12 的全部改进 + sklearn HGB|76.010|76.334|
-|`20261017_v2_seeds_tabmfull.csv`|后备。实验 12：6 个模型，全量重训 8 个种子 + TabM 95% 重训|—|76.337|
+| **`20261110_v6_meet_smoothing.csv`** | **soumission finale** : huit modèles, jumelles, lissage par groupes, lissage par paires (deux passages) | **75.575** | **76.030** |
+| `20261110_v5_pair_smoothing.csv` | la même sans le second passage | 75.607 | 76.089 |
+| `20261017_FINAL_v4_eight_models.csv` | huit modèles, jumelles, lissage par groupes | 75.966 | 76.298 |
+| `20261017_v3_plus.csv` | six modèles + HGB | 76.010 | 76.334 |
+| `20261017_v2_seeds_tabmfull.csv` | six modèles, 8 graines de réentraînement, TabM sur 95 % | — | 76.337 |
 
-**平台上勾选（Select）**：`20261110_v6_meet_smoothing.csv`（交叉拟合与公开榜都最好）和 `20261017_FINAL_v4_eight_models.csv`（不依赖成对平滑，作保险）。2026-10-17 时勾选的是 v4 和 `20261017_v3_plus.csv`。
+Ce sont des copies de fichiers produits dans `artifacts/` (`04_final_model/v5_pair_smoothing/`, `04_final_model/v4_eight_models/`, `03_model_selection/model_compare/`, `04_final_model/v2_more_seeds/`).
 
-前两个文件是 `artifacts/04_final_model/v5_pair_smoothing/` 中 `submission_v5_H_meet_ridge.csv`、`submission_v5_A_pair.csv` 的副本；后三个文件分别是 `artifacts/04_final_model/v4_eight_models/submission_final_v4_final.csv`、`artifacts/03_model_selection/model_compare/submission_final_v3_plus_final.csv`、`artifacts/04_final_model/v2_more_seeds/submission_final_v2_seeds_tabmfull_final.csv` 的副本。
+## Historique
 
-## 全部提交历史
-
-其余提交文件仍在 `artifacts/` 对应的目录中；早期的文件已删除，分数保留在这里。
-
-|日期|提交|来源|CV RMSE|公开榜|
+| Date | Soumission | Exp. | RMSE locale | Score public |
 |---|---|---|---:|---:|
-|2026-10-02|sklearn GradientBoosting|modeling（已删除）|82.60（折均值）|约 80|
-|2026-10-02|v1：XGBoost + CatBoost + MLP，NNLS|colab_gpu_pipeline（已删除）|77.775|78.0|
-|2026-10-16|v2：4 类模型 × 多种子，10 折，NNLS|colab_gpu_pipeline_v2（已删除）|77.302|77.799|
-|2026-10-16|v2 + 训练集双胞胎后处理（519 行改动）|v2_blend_twinfix（已删除）|77.060|77.604|
-|2026-10-16|ALL 特征 + CatBoost C2，三模型，5 折单种子|07|77.210|77.337|
-|2026-10-16|同上 + 双胞胎|07|76.966|77.158|
-|2026-10-16|F0 特征（对照）+ 双胞胎|07|77.701|77.947|
-|2026-10-16|07 的模型 + TabM、cb_rel、lgb_rel、RealMLP，全局 NNLS|08|77.013|77.207|
-|2026-10-16|同上 + 双胞胎|08|76.757|77.018|
-|2026-10-16|同上 + 同一运动员平滑|08|76.521|76.731|
-|2026-10-16|v2 + 双胞胎 + 同一运动员平滑|08|76.774|77.125|
-|2026-10-16|ALL3 特征，三模型 + 双胞胎|10|76.649|76.884|
-|2026-10-16|同上 + S0 平滑|10|76.539|76.775|
-|2026-10-16|同上 + S3 合并平滑|10|76.510|76.716|
-|2026-10-16|6 个模型 × 3 种子，折平均 + 双胞胎 + S3|11|76.044|76.520|
-|2026-10-16|同上，全量与折平均各半|11|—|76.421|
-|2026-10-16|同上，树模型全量重训 × 3 种子（TabM 折平均）|11|—|76.360|
-|2026-10-17|全量重训共 8 个种子，TabM 折平均|12|—|76.359|
-|2026-10-17|同上 + TabM 95% 重训 × 3 种子（v2_seeds_tabmfull）|12|—|76.337|
-|2026-10-17|v3_plus：+ sklearn HGB|13|76.010|76.334|
-|2026-10-17|三模型 R3 + 双胞胎 + S3（对照）|14|76.361|76.592|
-|2026-10-17|加运动员实力嵌套特征（变差）|14|76.508|76.802|
-|2026-10-17|**v4：8 个模型 + 双胞胎 + S3**|15|**75.966**|**76.298**|
-|2026-11-10|**v5：v4 + 成对相似度平滑（`20261110_v5_pair_smoothing.csv`，即 `artifacts/04_final_model/v5_pair_smoothing/submission_v5_A_pair.csv`）**|16|**75.607**|**76.089**|
-|2026-11-10|v6：v5 + 比赛层成对平滑（`20261110_v6_meet_smoothing.csv`，即 `artifacts/04_final_model/v5_pair_smoothing/submission_v5_H_meet_ridge.csv`）|17|**75.575**|**76.030**|
+| 2026-10-02 | GradientBoosting de scikit-learn | — | 82.60 | ≈ 80 |
+| 2026-10-02 | v1 : XGBoost + CatBoost + MLP, NNLS | — | 77.775 | 78.0 |
+| 2026-10-16 | v2 : quatre familles, plusieurs graines, 10 plis | — | 77.302 | 77.799 |
+| 2026-10-16 | v2 + jumelles | — | 77.060 | 77.604 |
+| 2026-10-16 | variables de la série 1, CatBoost régularisé, trois modèles | 07 | 77.210 | 77.337 |
+| 2026-10-16 | idem + jumelles | 07 | 76.966 | 77.158 |
+| 2026-10-16 | variables de départ + jumelles (témoin) | 07 | 77.701 | 77.947 |
+| 2026-10-16 | + TabM, cibles DOTS, RealMLP | 08 | 77.013 | 77.207 |
+| 2026-10-16 | idem + jumelles | 08 | 76.757 | 77.018 |
+| 2026-10-16 | idem + lissage par groupes | 08 | 76.521 | 76.731 |
+| 2026-10-16 | v2 + jumelles + lissage par groupes | 08 | 76.774 | 77.125 |
+| 2026-10-16 | variables finales, trois modèles + jumelles | 10 | 76.649 | 76.884 |
+| 2026-10-16 | idem + lissage (même année) | 10 | 76.539 | 76.775 |
+| 2026-10-16 | idem + lissage combiné | 10 | 76.510 | 76.716 |
+| 2026-10-16 | six modèles × 3 graines, moyenne des modèles de plis | 11 | 76.044 | 76.520 |
+| 2026-10-16 | idem, moitié modèles de plis, moitié réentraînement | 11 | — | 76.421 |
+| 2026-10-16 | idem, arbres réentraînés sur toutes les lignes | 11 | — | 76.360 |
+| 2026-10-17 | 8 graines de réentraînement | 12 | — | 76.359 |
+| 2026-10-17 | + TabM sur 95 % | 12 | — | 76.337 |
+| 2026-10-17 | + HGB | 13 | 76.010 | 76.334 |
+| 2026-10-17 | trois modèles, référence de la série 4 | 14 | 76.361 | 76.592 |
+| 2026-10-17 | + niveau du sportif (moins bon) | 14 | 76.508 | 76.802 |
+| 2026-10-17 | huit modèles | 15 | 75.966 | 76.298 |
+| 2026-11-10 | + lissage par paires de sportifs | 16 | 75.607 | 76.089 |
+| 2026-11-10 | **+ lissage par paires dans la compétition** | 17 | **75.575** | **76.030** |
 
-「—」：全量重训的版本没有对应的 CV（全部训练行都用于训练）。各实验的提交文件在 `artifacts/` 中的位置见 [README.md](../README.md) 的「原实验编号对照」。
+« — » : pas de score local quand toutes les lignes servent à l'entraînement.

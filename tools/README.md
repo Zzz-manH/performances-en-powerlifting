@@ -1,24 +1,21 @@
 # tools
 
-- `build_notebooks.py`：生成项目的 5 本 notebook。
-- `pair_smoothing.py`：实验 16–17 的成对相似度平滑。只读取 04 保存的 OOF 与测试预测，由 04 第 5 节的 `pair_smoothing` 开关调用，也可以单独运行：`python tools/pair_smoothing.py <项目根目录>`。
-- `cells/*.py`：notebook 中的训练代码，每个文件是一个代码单元格。它们是从在 Colab 上跑过的实验 07–15 原样抽取的，只改了数据路径和结束时的提示文字。
+- `build_notebooks.py` assemble les cinq notebooks à partir du code de `cells/` et des textes de `textes/`.
+- `cells/*.py` : le code des expériences, une cellule par fichier. `naming_compatibility.py` fait le lien entre les noms courts utilisés dans les fichiers de résultats (`cb_rel`, `ALL3`, `S3`…) et les libellés affichés.
+- `textes/*.md` : le texte des notebooks, les cellules étant séparées par `<!-- cellule -->`.
+- `pair_smoothing.py` : lissage par paires (expériences 16–17). Appelé par la section 5 du notebook 04, ou directement : `python tools/pair_smoothing.py <racine du projet>`.
 
-用法：
+Pour régénérer les notebooks :
 
 ```bash
-python tools/build_notebooks.py <输出目录>     # 例如 python tools/build_notebooks.py /tmp/nb
+python tools/build_notebooks.py /tmp/notebooks
 ```
 
-`cells/` 的文件名前缀：
+Les notebooks générés n'ont pas de sorties. Ceux de la racine ont été exécutés ; générer dans un autre dossier pour ne pas les écraser.
 
-|前缀|来源|
+| Préfixe des cellules | Expériences |
 |---|---|
-|`data_load`、`features_round1`–`3`、`final_frames`、`final_model_defs`、`stage2_twins_s3`|多个实验共用：读数据、三轮特征、最终分模型特征表、最终模型定义、双胞胎 + S3 第二层|
-|`r1_`、`r2_`、`r3_`、`r4_`|实验 07、09、10、14（02 的四轮特征消融）|
-|`zoo_`、`compare_`|实验 08、13（03 的模型选择）|
-|`v1_`、`v2_`、`v4_`|实验 11、12、15（04 的最终模型）|
-
-notebook 中每个实验的结果目录改成了 `artifacts/<notebook>/<子目录>`，其余代码与原实验逐字相同；原始 notebook 和生成它们的脚本在 Git 历史的第一个提交中。
-
-项目根目录里的 notebook 是在 Colab 上跑过、带输出的版本。直接输出到项目根目录会用无输出的版本覆盖它们，所以修改时先输出到其他目录，确认后再复制。
+| `data_load`, `features_round1`–`3`, `final_frames`, `final_model_defs`, `stage2_twins_s3` | parties communes : données, variables, modèles, jumelles et lissage par groupes |
+| `r1_` à `r4_` | 07, 09, 10, 14 : ablations du notebook 02 |
+| `zoo_`, `compare_` | 08, 13 : comparaison de modèles du notebook 03 |
+| `v1_`, `v2_`, `v4_` | 11, 12, 15 : ensemble final du notebook 04 |

@@ -13,7 +13,7 @@ for package in EXTRA_PACKAGES:
 if missing:
     result = subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', *missing], text=True,
                             capture_output=True, check=False)
-    print('pip 安装：', missing, '返回码', result.returncode)
+    print('pip install: ', missing, 'exit code', result.returncode)
     if result.returncode != 0:
         print(result.stderr[-2000:])
     importlib.invalidate_caches()

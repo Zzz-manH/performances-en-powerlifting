@@ -1,4 +1,4 @@
-# 实验运行时（Colab，2026-10）的版本；notebook 打开训练开关时会自动安装 catboost 与 pytabkit
+# Versions des expériences Colab (octobre 2026). Les étapes activées installent CatBoost et pytabkit.
 numpy==2.1.3
 pandas==2.2.3
 scipy
@@ -9,6 +9,6 @@ lightgbm==4.6.0
 xgboost==3.4.1
 torch==2.11.0
 pytabkit==1.7.3
-# 只有 03 的模型大比较需要（在 notebook 中自动安装）：interpret-core、tabpfn
-# 只有生成 notebook 的脚本 tools/build_notebooks.py 需要：
+# Comparaison élargie de 03 uniquement : interpret-core et tabpfn (installation dans le notebook).
+# Génération des notebooks avec tools/build_notebooks.py :
 nbformat

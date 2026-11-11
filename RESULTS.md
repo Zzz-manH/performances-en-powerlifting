@@ -1,317 +1,176 @@
-# Powerlifting 实验结果
+# Résultats des expériences
 
-更新：2026-11-10。任务：预测 `TotalKg`（kg），指标 RMSE（越低越好）。训练 105,000 行、测试 45,000 行，16 个特征（3 数值 + 13 类别）。
+Sauf mention contraire, les scores sont des RMSE hors pli en kg, calculées sur les 105 000 lignes avec `KFold(5, shuffle=True, random_state=42)`. Les numéros d'expérience sont ceux de notre journal ; le notebook correspondant est indiqué dans chaque titre.
 
-除特别说明，分数都是全部训练行的 pooled OOF RMSE，五折为 `KFold(5, shuffle=True, random_state=42)`。「实验 07–17」是实验的原始编号，对应的 notebook 章节见 [README.md](README.md)。
+## Vue d'ensemble
 
-## 总览
-
-|阶段|CV RMSE|公开榜|
+| Étape | RMSE locale | Score public |
 |---|---:|---:|
-|v1：XGBoost + CatBoost + MLP，NNLS（外层折早停）|77.775|78.0|
-|v2：4 类模型 × 多种子，10 折|77.302|77.799|
-|v2 + 双胞胎后处理|77.060|77.604|
-|07：+ 记录精度、跨地参赛、比赛背景特征，CatBoost C2，三模型 + 双胞胎（内层早停）|76.966|77.158|
-|08：+ TabM、cb_rel、lgb_rel、RealMLP；+ 同一运动员平滑|76.521|76.731|
-|10：+ 运动员历史 / 生涯、比赛经验、按模型挑特征；S3 平滑|76.510|76.716|
-|11：6 个模型 × 3 种子，树模型全量重训|76.044（折平均版）|76.360|
-|12：全量重训 8 个种子 + TabM 95% 重训|—|76.337|
-|13 v3_plus：+ sklearn HGB|76.010|76.334|
-|15 v4：8 个模型（+ cb_gl、HGB 三种子）|75.966|76.298|
-|16：+ 运动员成对平滑|75.607|76.089|
-|**17：+ 比赛层成对平滑（最终）**|**75.575**|**76.030**|
+| v1 : XGBoost + CatBoost + MLP, NNLS | 77.775 | 78.0 |
+| v2 : quatre familles, plusieurs graines, 10 plis | 77.302 | 77.799 |
+| v2 + lignes jumelles | 77.060 | 77.604 |
+| 07 : précision de saisie, déplacements, contexte ; CatBoost régularisé ; jumelles | 76.966 | 77.158 |
+| 08 : + TabM, cibles DOTS, RealMLP ; lissage par groupes | 76.521 | 76.731 |
+| 10 : + historique et carrière du sportif ; lissage combiné | 76.510 | 76.716 |
+| 11 : six modèles × 3 graines, arbres réentraînés sur toutes les lignes | 76.044 (modèles de plis) | 76.360 |
+| 12 : 8 graines de réentraînement, TabM sur 95 % | — | 76.337 |
+| 13 : + HGB | 76.010 | 76.334 |
+| 15 : huit modèles (+ CatBoost IPF GL) | 75.966 | 76.298 |
+| 16 : + lissage par paires de sportifs | 75.607 | 76.089 |
+| **17 : + lissage par paires dans la compétition (finale)** | **75.575** | **76.030** |
 
-最大的几步：
-- 记录精度与比赛背景特征：−0.67；
-- 同一运动员平滑：−0.24，公开榜 −0.29 / −0.48；
-- 成对相似度平滑：−0.39，公开榜 −0.27；
-- 双胞胎后处理：公开榜 −0.18 / −0.19；
-- 多种子：每个模型 −0.4 到 −0.8；
-- 全量重训：公开榜比折平均 −0.16；
-- 相对力量目标（cb_rel、cb_gl）。
+Les plus gros gains : variables de précision et de contexte (−0.67), moyenne de plusieurs graines (−0.4 à −0.8 par modèle), lissage par paires (−0.39), lissage par groupes (−0.24), jumelles (environ −0.2), réentraînement sur toutes les lignes (−0.16 au public).
 
-## 01 数据
+Les versions v1 et v2 arrêtaient l'entraînement sur le pli de validation, d'où un score local trop optimiste (0.5 kg sous le public pour v2). Depuis l'expérience 07, l'early stopping se fait sur 10 % de la partie d'apprentissage et l'écart est de 0.13 à 0.25 kg.
 
-- 原始数据没有空值，缺失写成 `Unknown`（主要在州、比赛州、上级联盟）。性别 M 72,454 行、F 32,537 行、Mx 9 行；装备 Raw 占 62%。
-- **记录精度**：约一半的年龄是 x.5（只登记了出生年份），体重有整数、x.5、一位小数、两位小数四种精度，不同联盟习惯不同。v2 模型的残差在这些分组上明显不为 0，例如 USAPL 内整数年龄 +19.0、x.5 年龄 −5.5。
-- **训练集双胞胎**：
-  - 1,109 个训练行（1.06%）在训练集中有 16 个特征完全相同的行，其中 73.4% 的 TotalKg 也完全相同：同一次成绩登记在多个组别。另有 100 行只有核心 9 列相同。
-  - 测试集有 465 行 exact 双胞胎、54 行 core 双胞胎。
-  - 这些行上 v2 的 RMSE 为 68.5，改用双胞胎成绩后为 35.8。
-- **id 是随机的**：按 id 排序后相邻两行来自同一场比赛的比例是随机顺序的 0.97 倍，与比赛年份的相关约为 0。
-- **疑似错误或不完整的成绩**：男子总成绩 < 2.5 × 体重、女子 < 1.8 × 体重，或年龄 < 5 岁，共 265 行（0.25%）。是否删除见 05。
-- **残差尾部**：|残差| > 150 kg 的 5.6% 行占 v2 总平方误差的 37%，多为失败或不完整的比赛记录。没有可识别的规律，不删除也不截尾。
+## Données (notebook 01)
 
-## 02 特征工程（五折，内层 10% 早停；三模型 NNLS 融合的 ΔRMSE ≤ −0.05 且 ≥ 4/5 折才保留）
+- Pas de cellule vide ; les valeurs inconnues sont codées `Unknown`. 72 454 hommes, 32 537 femmes, 9 Mx ; 62 % en Raw.
+- 48 % des âges sont en .5 (seule l'année de naissance est connue) ; la précision du poids dépend de la fédération. Sur les résidus de v2 à l'USAPL : +19.0 pour les âges entiers, −5.5 pour les âges en .5.
+- 1 109 lignes d'apprentissage (1.06 %) ont une jumelle exacte sur les 16 variables, avec le même total dans 73.4 % des cas ; 100 autres coïncident sur 9 variables. Dans le test : 465 jumelles exactes et 54 sur 9 variables. Sur ces lignes, la RMSE de v2 passe de 68.5 à 35.8 quand on utilise le total de la jumelle.
+- L'id est aléatoire (aucun lien avec la compétition ni l'année).
+- 265 lignes suspectes (0.25 %) : total inférieur à 2.5 × poids (hommes) ou 1.8 × poids (femmes), ou âge inférieur à 5 ans.
+- 5.6 % des lignes ont un résidu de plus de 150 kg en valeur absolue et pèsent 37 % de l'erreur quadratique de v2.
 
-### 第一轮（实验 07，基线 F0 = v2 的 19 列）
+## Variables (notebook 02)
 
-|变体|LightGBM|XGBoost|CatBoost C1|三模型融合|Δ 融合|改善折数|
+Chaque bloc est jugé sur la combinaison NNLS de LightGBM, XGBoost et CatBoost. Seuil : −0.05 kg en moyenne et au moins 4 plis améliorés sur 5.
+
+**Série 1 (expérience 07), référence = 19 colonnes de départ**
+
+| Variante | LightGBM | XGBoost | CatBoost | Combinaison | Écart | Plis |
 |---|---:|---:|---:|---:|---:|---:|
-|F0|78.579|79.323|78.824|77.956|—|—|
-|T 跨地参赛|78.533|79.251|78.763|77.912|−0.044|4/5（未达标）|
-|P 记录精度|78.293|78.958|78.557|77.631|−0.326|5/5|
-|PT|78.237|78.868|78.500|77.622|−0.334|5/5|
-|M 比赛背景|78.254|78.955|78.349|77.594|−0.362|5/5|
-|**ALL = P + T + M**|**77.923**|**78.806**|**78.065**|**77.283**|**−0.673**|5/5|
+| Départ | 78.579 | 79.323 | 78.824 | 77.956 | — | — |
+| Déplacements | 78.533 | 79.251 | 78.763 | 77.912 | −0.044 | 4/5 |
+| Précision | 78.293 | 78.958 | 78.557 | 77.631 | −0.326 | 5/5 |
+| Contexte | 78.254 | 78.955 | 78.349 | 77.594 | −0.362 | 5/5 |
+| **Les trois** | **77.923** | **78.806** | **78.065** | **77.283** | **−0.673** | 5/5 |
 
-ALL + CatBoost C2 的三模型融合 77.210，加双胞胎 76.966。
+**Série 2 (expérience 09)**
 
-### 第二轮（实验 09，基线 R1 = ALL，CatBoost C2）
-
-|块|三模型融合|Δ|改善折数|CatBoost 单独 Δ|XGBoost 单独 Δ|LightGBM 单独 Δ|
-|---|---:|---:|---:|---:|---:|---:|
-|R1|77.208|—|—|—|—|—|
-|**H 运动员历史**|**77.081**|**−0.127**|5/5|−0.060|−0.243|−0.050|
-|C 比赛 / 运动员 ID（只给 CatBoost）|77.161|−0.047|5/5（未达标）|−0.120|—|—|
-|M2 比赛背景加强|77.212|+0.003|2/5|−0.065|−0.062|+0.071|
-|S DOTS 系数|77.260|+0.052|0/5|+0.051|−0.086|+0.094|
-|D 组别背景|77.263|+0.055|0/5|+0.115|−0.079|+0.062|
-|**ALL2 = R1 + H**|**77.077**|**−0.131**|5/5|||
-
-ALL2 + 双胞胎 76.848。加入 H 后，「只出现一次的运动员」残差从 −4.5 降到 −1.8，「第一次出现」从 −3.5 降到 −1.3。
-
-### 第三轮（实验 10，基线 R2 = ALL2）
-
-|块|三模型融合|Δ|改善折数|CatBoost 单独 Δ|XGBoost 单独 Δ|LightGBM 单独 Δ|
-|---|---:|---:|---:|---:|---:|---:|
-|R2|77.079|—|—|—|—|—|
-|H2 运动员生涯|76.993|−0.086|5/5|−0.070|+0.025|−0.046|
-|E 比赛经验结构|77.007|−0.072|4/5|−0.045|−0.064|−0.108|
-|PM 按模型挑特征（CatBoost + M2 + ID；XGBoost + M2 + S + D）|76.970|−0.110|5/5|−0.222|+0.094|（不变）|
-|**ALL3 = 全部**|**76.876**|**−0.203**|5/5|单模型：CatBoost 77.505、LightGBM 77.708、XGBoost 78.457|||
-
-ALL3 + 双胞胎 76.649。剩下的分组偏差多在 2 kg 以内，不看成绩的特征到此基本饱和。
-
-### 第四轮（实验 14，基线 R3 = ALL3 分模型特征；LightGBM、XGBoost、cb_rel）
-
-|变体|三模型融合|Δ|改善折数|加双胞胎 + S3|公开榜|
-|---|---:|---:|---:|---:|---:|
-|R3|76.717|—|—|76.361|76.592|
-|AS 运动员实力（嵌套折外）|76.856|+0.139|0/5|76.508|76.802|
-|MS 比赛实力（嵌套折外）|77.233|+0.516|0/5|||
-
-基于成绩的特征都变差，CV 与公开榜一致。可能的原因有两个：训练行的特征只参考 80% 的数据，验证行和测试行参考全部训练部分，两者分布不一致；而且这类特征噪声大、容易过拟合。同一信息放在模型之后由 S3 平滑使用，效果更好。
-
-### 最终特征（ALL3，按模型）
-
-|模型|特征块|列数|
-|---|---|---:|
-|LightGBM、lgb_rel、TabM、sklearn HGB|F0 + P + T + M + H + H2 + E|57|
-|XGBoost|同上 + M2 + S + D|78|
-|CatBoost、cb_rel、cb_gl|同上 + M2 + C|73|
-
-## 03 模型选择
-
-### 早期基线（代码在 Git 历史第一个提交）
-
-|来源|协议|模型|RMSE|
-|---|---|---|---:|
-|modeling|5 折，折均值|Ridge / 决策树 / 随机森林 / GradientBoosting|105.39 / 88.48 / 85.16 / 82.60|
-|feature_engineering|同上|GB + 特征 + 目标编码|~~80.40~~（目标泄漏：用全训练集做了目标编码，不可信）|
-|pipeline|5 折，外层折早停|LightGBM 原始特征 → + 体重级别|78.550 → 78.359|
-|||+ 频次 / 出生年 / 性别 × 装备 / 目标编码|78.542 / 78.561 / 78.600 / 78.816（无效）|
-|||CatBoost；LightGBM + CatBoost 融合|78.494；77.766|
-|v1|5 折，外层折早停|XGBoost / CatBoost / MLP；NNLS 融合|78.997 / 78.597 / 80.620；77.775|
-|v2|10 折，外层折早停|LightGBM ×1 / XGBoost ×3 / CatBoost ×3 / MLP ×3 种子|78.189 / 78.432 / 78.093 / 78.395|
-|||NNLS 融合（0.136 / 0.223 / 0.388 / 0.254）|77.302|
-
-四类模型单独都在 78.1–78.4，OOF 相关 0.990–0.995。v1、v2 用外层验证折早停、在同一份 OOF 上拟合融合权重，交叉验证偏乐观：v2 的公开榜比 CV 高约 0.5。实验 07 起改为外层训练部分内留 10% 早停，差缩小到 +0.13 到 +0.25。
-
-### CatBoost 参数（实验 07，特征 ALL）
-
-C1（v2，L2 3）78.065 → **C2（depth 8、L2 10、Bernoulli 0.8）77.846**（−0.22，5/5）；C3（depth 6）77.890（−0.17）。之后都用 C2。
-
-### 其他模型与相对力量目标（实验 08，特征 ALL，与实验 07 同一划分）
-
-|模型|单独 OOF RMSE|与 07 融合相关|加入 07 融合 Δ|改善折数|每折用时|
-|---|---:|---:|---:|---:|---:|
-|**TabM**（pytabkit，分段线性嵌入）|**77.636**|0.9956|**−0.153**|5/5|3.7 分钟|
-|cb_rel（DOTS 相对力量目标 CatBoost）|77.761|0.9968|−0.055|5/5|1.4 分钟|
-|lgb_rel|77.944|0.9962|−0.044|5/5|14 秒|
-|RealMLP|78.483|0.9932|−0.072|5/5|15 分钟|
-|对照：07 CatBoost C2 / LightGBM / XGBoost|77.846 / 77.923 / 78.806||||
-
-堆叠方式（五折嵌套）：全局 NNLS 77.013，按性别 × 装备分段 77.017，残差元模型 77.098 → 用全局 NNLS。
-
-### 目标变量工程（实验 14，R3 特征，种子 42）
-
-|模型|单独|与 cb_rel 相关|加入三模型融合（嵌套）|改善折数|
-|---|---:|---:|---:|---:|
-|cb_rel（DOTS）|77.160|—|—|—|
-|**cb_gl（IPF GL）**|**77.162**|0.9975|**−0.076**|5/5|
-|cb_allo（体重^(2/3)）|77.327|0.9973|−0.043|5/5|
-
-### 其他模型大比较（实验 13，LightGBM / TabM 的 57 列特征，种子 42 五折）
-
-|模型|单独 RMSE|与融合相关|加入实验 11 的 6 模型融合（嵌套）|改善折数|权重|
-|---|---:|---:|---:|---:|---:|
-|cb_rel / TabM / CatBoost / lgb_rel / LightGBM / XGBoost（实验 11）|77.167 / 77.493 / 77.497 / 77.646 / 77.709 / 78.458|0.993–0.997|—|—|—|
-|**sklearn HistGradientBoosting**|**77.881**|0.994|**76.395 → 76.361（−0.034）**|5/5|0.147|
-|ExtraTrees|81.054|0.985|0|0|0|
-|EBM|81.448|0.985|0|0|0|
-|TabPFN v2（上下文 1 万行）|81.581|0.985|0|0|0|
-|随机森林|81.616|0.985|0|0|0|
-|Ridge|84.969|0.973|0|0|0|
-
-MLP-PLR、ResNet 因缺少依赖包 skorch 未运行。梯度提升树和 TabM 明显领先；其余模型单独差 3–7 kg，融合权重为 0。
-
-### cb_rel 学习率（实验 12，种子 42 五折配对）
-
-学习率 0.03 相对 0.05：逐折 −0.167 / −0.118 / −0.057 / −0.022 / +0.014，平均 −0.070，4/5 折更好；最佳轮数约 1.44 倍。之后 cb_rel、cb_gl 的全量重训用 0.03。
-
-## 04 最终模型
-
-### 实验 11：6 个模型 × 5 折 × 3 种子
-
-|模型|种子 42|种子 7|种子 2024|三种子平均 OOF|NNLS 权重|
-|---|---:|---:|---:|---:|---:|
-|**cb_rel**|77.167|77.237|77.312|**76.784**|0.453|
-|TabM|77.493|77.603|77.508|77.050|0.217|
-|CatBoost C2|77.497|77.605|77.605|77.097|0.042|
-|lgb_rel|77.646|77.681|77.790|77.167|0.057|
-|LightGBM|77.709|77.759|77.824|77.200|0.031|
-|XGBoost|78.458|78.365|78.417|77.693|0.201|
-
-融合（嵌套）76.395 → 双胞胎 76.172 → S3 平滑 76.044（交叉拟合）。
-
-|测试预测（都加双胞胎 + S3）|公开榜|
-|---|---:|
-|**全量重训**：树模型在全部 105,000 行上重训 × 3 种子，TabM 用折平均|**76.360**|
-|混合：全量与折平均各半|76.421|
-|折平均：每个模型 15 个折模型|76.520|
-
-全量重训比折平均好 0.16：训练数据越多越好。
-
-### 实验 12、13
-
-- 全量重训：cb_rel、XGBoost、lgb_rel、LightGBM 各加 5 个种子（共 8 个，cb_rel 新种子用学习率 0.03）→ 公开榜 76.359。
-- 再加 TabM 在 95% 数据上重训 × 3 种子 → 76.337。
-- 再加 sklearn HGB（实验 13，五折平均）→ v3_plus，交叉拟合 76.010，公开榜 76.334。
-
-### 实验 15：8 个模型（最终）
-
-|模型|三种子平均 OOF|测试预测来自|NNLS 权重|
-|---|---:|---|---:|
-|cb_gl|76.781|5 个全量重训（学习率 0.03）|**0.289**|
-|cb_rel|76.784|8 个全量重训|0.218|
-|sklearn HGB|77.242|3 个全部数据重训|0.200|
-|TabM|77.050|5 个 95% 重训|0.168|
-|XGBoost|77.693|8 个全量重训|0.125|
-|LightGBM / lgb_rel / CatBoost|77.200 / 77.167 / 77.097|8 / 8 / 3 个全量重训|0|
-
-|融合（嵌套）|OOF RMSE|
-|---|---:|
-|实验 11 的 6 个模型|76.395|
-|+ HGB|76.351|
-|**+ HGB + cb_gl**|**76.319**|
-|+ 双胞胎（交叉拟合，alpha：exact 0.854、core 0.523）|76.097|
-|**+ S3 平滑（交叉拟合）**|**75.966**|
-
-测试中有双胞胎的行 519 行；S3 平均调整 3.73 kg。与 v3_plus 的测试预测相关 0.99987，平均相差 1.80 kg。
-
-**公开榜**：v4 **76.298**，2026-10-17 公开榜第 1（第 2 名 76.444）。比 v3_plus 好 0.036，与 CV 上的 0.045 一致。
-
-**Kaggle 最终选择**：v4（`submission_final_v4_final.csv`，CV 与公开榜都最好）+ v3_plus（公开榜 76.334）。
-
-## 05 误差分析
-
-### 第二层（双胞胎 + 同一运动员平滑，按「性别 + 国籍 + 州」分两半交叉拟合）
-
-|基础|OOF|+ 双胞胎|+ 同一运动员平滑|平滑增益|
-|---|---:|---:|---:|---:|
-|08 堆叠|77.013|76.757|76.521|−0.236|
-|v2|77.302|77.059|76.774|−0.285|
-
-08 的平滑系数：A0（性别 + 国籍 + 州 + 出生年）0.25，A2（+ 联盟 + 装备）0.12，A3（+ 级别）0.19。v2 上比赛键系数 0.48：v2 没有比赛背景特征，平滑替它补上了。公开榜：v2 77.604 → 77.125（−0.48），08 77.018 → 76.731（−0.29）。
-
-实验 10 在 ALL3 三模型融合 + 双胞胎（76.649）上比较 5 种做法：
-
-|做法|交叉拟合 RMSE|相对双胞胎|公开榜|
+| Bloc | Combinaison | Écart | Plis |
 |---|---:|---:|---:|
-|**S3 精确 + 出生年 ±1 + 时间衰减，线性**|**76.510**|−0.139|**76.716**|
-|S2 时间衰减|76.527|−0.122||
-|S0 实验 08 的原版|76.539|−0.109|76.775|
-|S1 出生年 ±1|76.544|−0.105||
-|S4 三种特征 + 小 LightGBM|76.858|+0.209（过拟合）||
+| Référence | 77.208 | — | — |
+| **Historique du sportif** | **77.081** | **−0.127** | 5/5 |
+| Identifiants (CatBoost seulement) | 77.161 | −0.047 | 5/5 |
+| Contexte enrichi | 77.212 | +0.003 | 2/5 |
+| Coefficient DOTS | 77.260 | +0.052 | 0/5 |
+| Divisions | 77.263 | +0.055 | 0/5 |
 
-特征里加入运动员历史（H、H2）后，平滑的增益从 −0.24 降到约 −0.13，两者部分重叠、仍然互补。
+Avec l'historique, le résidu moyen des sportifs vus une seule fois passe de −4.5 à −1.8.
 
-### 数据清洗实验（实验 11，种子 42 五折；训练时去掉 265 个疑似行，评估用全部行）
+**Série 3 (expérience 10)**
 
-|模型|基线|去掉疑似行|Δ|更好折数|只看正常行：基线 → 去掉后|
-|---|---:|---:|---:|---:|---|
-|LightGBM|77.708|77.751|+0.043|2/5|76.821 → 76.787|
-|XGBoost|78.457|78.519|+0.063|2/5|77.545 → 77.519|
-|CatBoost|77.497|77.577|+0.081|1/5|76.627 → 76.620|
+| Bloc | Combinaison | Écart | Plis |
+|---|---:|---:|---:|
+| Référence | 77.079 | — | — |
+| Carrière | 76.993 | −0.086 | 5/5 |
+| Expérience du plateau | 77.007 | −0.072 | 4/5 |
+| Ajouts par modèle | 76.970 | −0.110 | 5/5 |
+| **Les trois** | **76.876** | **−0.203** | 5/5 |
 
-在全部验证行上都变差，只在正常行上略好 0.01–0.03。测试集里同样有这类失败记录，所以保留全部行。
+**Série 4 (expérience 14) : variables tirées des totaux, calculées hors pli**
 
-### 最终模型的残差（v4 的 OOF）
-
-- 大多数分组（性别 × 装备、年龄段、体重段、比赛年份、联盟、年龄精度）的残差均值在 ±1.5 kg 以内。偏差较大的：
-  - 女子多层装备（380 行）+4.3；
-  - 体重 ≥ 140 kg +3.9；
-  - 60 岁以上 −2.5；
-  - 只出现一次的运动员 −1.3。
-- 女子无装备 RMSE 54 kg，男子多层装备 111 kg。|残差| > 150 kg 的 5.3% 行占总平方误差的 36%。
-- 同一运动员留一残差相关：融合后约 0.045（v2 时约 0.095，H、H2 特征已吸收一部分），加第二层后约 0。比赛 × 性别 × 装备键：−0.008 → 0.037。
-
-### 没有成功的方向
-
-- 基于成绩的嵌套特征（运动员实力、比赛实力）：+0.14 / +0.52，公开榜也变差。
-- 比赛背景加强、组别背景、DOTS 系数（三模型融合）：+0.00 到 +0.05；跨地参赛单独 −0.04，未达标。
-- 粗粒度目标编码（性别 × 装备 × 级别、联盟 × 性别 × 装备）：+0.27；Ridge 上安全的折内 TargetEncoder 也变差。
-- 频次特征、性别 × 装备交互、近似出生年：±0.05 以内。
-- TabPFN、随机森林、ExtraTrees、EBM、Ridge：融合权重 0；分段 NNLS、残差元模型不如全局 NNLS；第二层用小 LightGBM 过拟合。
-- 训练时删除疑似错误的成绩：+0.04 到 +0.08。
-- id 作为特征：id 顺序随机。
-- log 目标：预测几何均值，对 kg 的 RMSE 系统偏低，没有采用。
-- 外部数据（OpenPowerlifting 原始库）：测试行就在其中，等于标签泄漏，禁止使用。
-
-### 交叉验证与公开榜
-
-- **排序一致**：实验 07 起（内层早停），公开榜与 CV 的排序相关 0.97。
-- **公开榜一致地比 CV 高**：大多高 0.2–0.3 kg；实验 11 折平均版高 0.48；用外层折早停的 v2 系列高 0.35–0.54。
-- **为什么会有这个偏移**：用 OOF 模拟公开榜（随机 13,500 行）：
-  - 单个提交的 RMSE 标准差约 0.59 kg，而两个相近提交之差的标准差只有约 0.03 kg。
-  - 公开榜对所有提交用同一批行，所以它们共享同一个偏移。比较两个提交时，看差值可靠，看绝对值不可靠。
-- **配对比较与 CV 一致**：
-  - 特征 F0 → ALL + C2：公开榜 −0.79；
-  - 双胞胎：−0.18 / −0.19；
-  - 第四轮特征：CV 与公开榜都变差；
-  - v4 对 v3_plus：CV −0.045，公开榜 −0.036。模拟中反过来的概率约 4%。
-
-## 04（续）成对相似度平滑（实验 16，2026-11-10）
-
-在 v4 的「融合 → 双胞胎 → S3」之后加第三层，不重训第一层模型。S3 按「性别 + 国籍 + 州 + 出生年」分组取残差均值，但这个组平均有 8 行，多数不是同一个运动员。这里对每个候选对 (i, j)（同性别 + 国籍 + 州，出生年相差 ≤ 1）用 LightGBM 估计 `r_i × r_j / Var(r)`，特征是体重差、年份差、出生年差、联盟 / 装备 / 级别是否相同、候选人数等；再按预测权重汇总邻居残差得到 5 个特征，和 S3 的特征一起做最小二乘。成对模型与系数都按 `HALF` 交叉拟合。代码：`tools/pair_smoothing.py`，由 04 第 5 节调用；结果目录 `artifacts/04_final_model/v5_pair_smoothing/`。
-
-|方案|交叉拟合 RMSE|相对 v4|改善的折 / 半边|公开榜|
+| Variante | Combinaison | Écart | Plis | Score public après corrections |
 |---|---:|---:|---:|---:|
-|v4（S3）|75.966|—|—|76.298|
-|**A_pair：S3 + 成对平滑**|**75.607**|**−0.359**|5/5，2/2|**76.089**|
-|B：A +「一方州未知、一方已知」的候选对|75.608|−0.358|5/5，2/2||
-|C / D：B + 岭回归（1e-3 / 1e-2）|75.607 / 75.606|−0.359 / −0.360|5/5，2/2||
-|E：B 去掉 S3 特征|75.633|−0.332|5/5，2/2||
-|F：B，成对模型 600 轮（其余为 300 轮）|75.634|−0.332|5/5，2/2||
+| Référence | 76.717 | — | — | 76.592 |
+| Niveau du sportif | 76.856 | +0.139 | 0/5 | 76.802 |
+| Niveau de la compétition | 77.233 | +0.516 | 0/5 | |
 
-- 候选对 19,597,625 个（train-train 13,603,214）。A_pair 的提交与 v4 的平均绝对差为 4.14 kg。
-- 公开榜 76.298 → 76.089（−0.209），2026-11-10 公开榜第 2。按 13,500 行抽样，CV 增益在公开榜规模上的 5–95% 区间为 −0.48 到 −0.23，实际略低于区间下沿。
-- B 的跨组候选对在早期一次本地运行中显示 75.548；那次的交叉拟合没有排除「训练对的另一行落在被预测半边」的情况，收紧后增益消失，不采用。
-- A_pair 之后，近似运动员分组内的残差两两相关约为 0（−0.006 到 +0.001）；同一场比赛 × 性别 × 装备的小组（≤ 10 行）还剩 +0.03 到 +0.05。
-- 验证方式与 05 中的第二层相同，同样不是整条流程的嵌套验证。
+**Variables finales** : 57 colonnes pour LightGBM, TabM et HGB ; 78 pour XGBoost (+ contexte enrichi, DOTS, divisions) ; 73 pour CatBoost (+ contexte enrichi, identifiants).
 
-## 04（续）比赛层成对平滑（实验 17，2026-11-10）
+## Modèles (notebook 03)
 
-在 A_pair 的残差上再做一次同样的成对平滑，候选对改为「同一场比赛（联盟 × 年份 × 举办国 × 举办州）× 性别 × 装备」，只保留训练行不超过 300 的组。代码与结果目录同实验 16。
+**Premiers essais** (5 plis, moyenne des plis) : Ridge 105.39, arbre de décision 88.48, forêt aléatoire 85.16, GradientBoosting 82.60. Un essai de target encoding sur tout l'apprentissage donnait 80.40, mais avec une fuite de cible : résultat écarté. Dans v2, les quatre familles font 78.1 à 78.4 seules, avec des corrélations de 0.990 à 0.995.
 
-|方案|交叉拟合 RMSE|相对 v4|相对 A_pair|改善的折 / 半边|公开榜|
-|---|---:|---:|---:|---:|---:|
-|A_pair（重跑）|75.607|−0.359|—|5/5，2/2|76.089|
-|G_meet：A_pair + 比赛层成对特征|75.580|−0.386|−0.027|5/5，1/2||
-|**H_meet_ridge：G + 岭回归**|**75.575**|**−0.391**|**−0.032**|5/5，2/2|**76.030**|
+**CatBoost (expérience 07)** : profondeur 8, L2 3 : 78.065 ; **profondeur 8, L2 10, Bernoulli 0.8 : 77.846** (5/5) ; profondeur 6, L2 10 : 77.890.
 
-- A_pair 重跑与实验 16 的结果一致（75.60690）。
-- H 相对 A_pair 的增益为 0.032，只略高于事先定的 0.03 门槛；G 只在一个半边上改善。H 的提交与 v4 的平均绝对差为 4.77 kg。
-- 提交文件：`submissions/20261110_v6_meet_smoothing.csv`（即 `artifacts/04_final_model/v5_pair_smoothing/submission_v5_H_meet_ridge.csv`）。
-- 公开榜 76.089 → 76.030（−0.058），仍为第 2（第 1 名 75.650）。到此停止，不再加层。
+**Autres modèles (expérience 08)**, ajoutés à la combinaison de l'expérience 07 :
+
+| Modèle | Seul | Écart dans la combinaison | Plis | Temps par pli |
+|---|---:|---:|---:|---:|
+| TabM | 77.636 | −0.153 | 5/5 | 3.7 min |
+| CatBoost DOTS | 77.761 | −0.055 | 5/5 | 1.4 min |
+| LightGBM DOTS | 77.944 | −0.044 | 5/5 | 14 s |
+| RealMLP | 78.483 | −0.072 | 5/5 | 15 min |
+
+Façons de combiner : NNLS global 77.013, NNLS par sexe × équipement 77.017, méta-modèle de résidus 77.098.
+
+**Cibles (expérience 14)** : CatBoost DOTS 77.160 ; CatBoost IPF GL 77.162 (corrélation 0.9975, −0.076 dans la combinaison, 5/5) ; cible allométrique 77.327 (−0.043).
+
+**Grande comparaison (expérience 13)**, 57 variables, graine 42 :
+
+| Modèle | Seul | Apport aux six modèles de l'expérience 11 |
+|---|---:|---|
+| CatBoost DOTS / TabM / CatBoost / LightGBM DOTS / LightGBM / XGBoost | 77.167 / 77.493 / 77.497 / 77.646 / 77.709 / 78.458 | (déjà dedans) |
+| **HGB** | 77.881 | 76.395 → 76.361, 5/5, poids 0.147 |
+| ExtraTrees, EBM, TabPFN, forêt aléatoire | 81.1 à 81.6 | poids nul |
+| Ridge | 84.969 | poids nul |
+
+**Taux d'apprentissage du CatBoost DOTS (expérience 12)** : 0.03 contre 0.05, −0.070 en moyenne, 4 plis sur 5, 1.44 fois plus d'itérations.
+
+## Ensemble final (notebook 04)
+
+**Expérience 11 : six modèles × 5 plis × 3 graines.** Combinaison 76.395, avec jumelles 76.172, avec lissage 76.044. Au public : moyenne des modèles de plis 76.520, moitié-moitié 76.421, arbres réentraînés sur toutes les lignes **76.360**.
+
+**Expérience 15 : huit modèles**
+
+| Modèle | RMSE, moyenne de 3 graines | Prédiction du test | Poids NNLS |
+|---|---:|---|---:|
+| CatBoost IPF GL | 76.781 | 5 réentraînements complets | 0.289 |
+| CatBoost DOTS | 76.784 | 8 réentraînements complets | 0.218 |
+| HGB | 77.242 | 3 réentraînements | 0.200 |
+| TabM | 77.050 | 5 réentraînements sur 95 % | 0.168 |
+| XGBoost | 77.693 | 8 réentraînements complets | 0.125 |
+| LightGBM / LightGBM DOTS / CatBoost | 77.200 / 77.167 / 77.097 | | 0 |
+
+| Étape | RMSE locale |
+|---|---:|
+| Six modèles | 76.395 |
+| + HGB | 76.351 |
+| + CatBoost IPF GL | 76.319 |
+| + jumelles (alpha 0.854 pour une jumelle exacte, 0.523 sur 9 variables) | 76.097 |
+| + lissage par groupes | 75.966 |
+
+**Expérience 16 : lissage par paires de sportifs.** 19 597 625 paires candidates, dont 13 603 214 entre lignes d'apprentissage.
+
+| Variante | RMSE locale | Écart | Plis / moitiés | Public |
+|---|---:|---:|---:|---:|
+| Huit modèles, lissage par groupes | 75.966 | — | — | 76.298 |
+| **A : + lissage par paires** | **75.607** | **−0.359** | 5/5, 2/2 | **76.089** |
+| B : A + paires dont un seul État est inconnu | 75.608 | −0.358 | 5/5, 2/2 | |
+| B + ridge (1e-3 / 1e-2) | 75.607 / 75.606 | | | |
+| B sans les statistiques de groupes | 75.633 | −0.332 | | |
+| B avec 600 itérations au lieu de 300 | 75.634 | −0.332 | | |
+
+Une première version de B affichait 75.548 : le croisement laissait passer des paires d'ajustement dont une ligne était dans la moitié évaluée. Une fois corrigé, le gain disparaît.
+
+**Expérience 17 : second passage, paires d'une même compétition × sexe × équipement.**
+
+| Variante | RMSE locale | Écart avec A | Plis / moitiés | Public |
+|---|---:|---:|---:|---:|
+| A | 75.607 | — | | 76.089 |
+| G : + paires dans la compétition | 75.580 | −0.027 | 5/5, 1/2 | |
+| **H : G avec ridge 1e-2** | **75.575** | **−0.032** | 5/5, 2/2 | **76.030** |
+
+Le seuil fixé avant l'essai était de 0.03 kg. On s'arrête là.
+
+## Analyse des erreurs (notebook 05)
+
+**Variantes du lissage par groupes (expérience 10)**, à partir de 76.649 (trois modèles + jumelles) :
+
+| Variante | RMSE locale | Public |
+|---|---:|---:|
+| Même année de naissance | 76.539 | 76.775 |
+| Année à ±1 | 76.544 | |
+| Pondération temporelle | 76.527 | |
+| **Les trois, combinaison linéaire** | **76.510** | **76.716** |
+| Les trois, petit LightGBM | 76.858 | |
+
+**Retrait des 265 lignes suspectes (expérience 11)** : LightGBM +0.043, XGBoost +0.063, CatBoost +0.081 sur toute la validation ; −0.01 à −0.03 sur les seules lignes non suspectes.
+
+**Résidus de la version à huit modèles** : moins de 1.5 kg d'écart moyen dans la plupart des groupes ; femmes en Multi-ply +4.3 (380 lignes), 140 kg et plus +3.9, plus de 60 ans −2.5. RMSE de 54 kg (femmes en Raw) à 111 kg (hommes en Multi-ply).
+
+**Score local et score public** : corrélation de rang 0.97 depuis l'expérience 07. En tirant 13 500 lignes au hasard parmi les prédictions hors pli, l'écart-type d'un score est de 0.59 kg, celui de la différence entre deux soumissions proches de 0.03 kg.
+
+**Ce qui n'a pas marché** : variables tirées des totaux ; target encoding grossier (+0.27) ; fréquences et interactions simples (±0.05) ; TabPFN, forêt aléatoire, ExtraTrees, EBM, Ridge ; NNLS par groupe ; lissage par LightGBM ; retrait des lignes suspectes ; cible log. La base OpenPowerlifting n'est pas utilisée car elle contient les lignes du test.

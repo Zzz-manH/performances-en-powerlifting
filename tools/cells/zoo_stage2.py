@@ -1,12 +1,12 @@
 CORE = ['Age', 'BodyweightKg', 'MeetYear', 'Sex', 'Federation', 'MeetCountry', 'MeetState', 'Country', 'State']
 ATHLETE_KEYS = {
-    'A0': ['Sex', 'Country', 'State', 'birth_year'],
-    'A1': ['Sex', 'Country', 'State', 'Federation', 'birth_year'],
-    'A2': ['Sex', 'Country', 'State', 'Federation', 'birth_year', 'Equipment'],
-    'A3': ['Sex', 'Country', 'State', 'Federation', 'birth_year', 'Equipment', 'WeightClassKg'],
-    'M2': ['Federation', 'MeetYear', 'MeetCountry', 'MeetState', 'Sex', 'Equipment'],
+    MATCH_RESIDENCE: ['Sex', 'Country', 'State', 'birth_year'],
+    MATCH_FEDERATION: ['Sex', 'Country', 'State', 'Federation', 'birth_year'],
+    MATCH_EQUIPMENT: ['Sex', 'Country', 'State', 'Federation', 'birth_year', 'Equipment'],
+    MATCH_WEIGHT_CLASS: ['Sex', 'Country', 'State', 'Federation', 'birth_year', 'Equipment', 'WeightClassKg'],
+    MATCH_MEET: ['Federation', 'MeetYear', 'MeetCountry', 'MeetState', 'Sex', 'Equipment'],
 }
-SHRINK = {'A0': 5.0, 'A1': 5.0, 'A2': 3.0, 'A3': 2.0, 'M2': 20.0}
+RESIDUAL_SHRINKAGE = {MATCH_RESIDENCE: 5.0, MATCH_FEDERATION: 5.0, MATCH_EQUIPMENT: 3.0, MATCH_WEIGHT_CLASS: 2.0, MATCH_MEET: 20.0}
 
 
 def keyed(frame):
@@ -26,11 +26,11 @@ AK_TR = {k: row_keys(KT, cols) for k, cols in ATHLETE_KEYS.items()}
 AK_TE = {k: row_keys(KQ, cols) for k, cols in ATHLETE_KEYS.items()}
 VALID_TR = (train['Country'] != 'Unknown').to_numpy(dtype='float64')
 VALID_TE = (test['Country'] != 'Unknown').to_numpy(dtype='float64')
-HALF = (AK_TR['A0'] % 2).astype(int)
+HALF = (AK_TR[MATCH_RESIDENCE] % 2).astype(int)
 
 
 def group_sum(keys_tr, values, keys_query=None):
-    """训练行：同键其他训练行（不含自己）的和与个数；查询行：同键全部训练行的和与个数。"""
+    """Training rows: sums/counts excluding the current row; query rows: sums/counts over all matching training rows."""
     table = pd.DataFrame({'k': keys_tr, 'v': values}).groupby('k')['v'].agg(['sum', 'count'])
     if keys_query is None:
         k = pd.Series(keys_tr)
@@ -39,7 +39,7 @@ def group_sum(keys_tr, values, keys_query=None):
     return k.map(table['sum']).fillna(0).to_numpy(), k.map(table['count']).fillna(0).to_numpy()
 
 
-def twin_mates(query=False):
+def matching_record_values(query=False):
     s_ex, n_ex = group_sum(EX_TR, y, EX_TE if query else None)
     s_co, n_co = group_sum(CO_TR, y, CO_TE if query else None)
     level = np.select([n_ex > 0, n_co > 0], ['exact', 'core'], default='none')
@@ -47,8 +47,8 @@ def twin_mates(query=False):
     return level, mate
 
 
-TW_LEVEL, TW_MATE = twin_mates()
-TW_LEVEL_T, TW_MATE_T = twin_mates(query=True)
+TW_LEVEL, TW_MATE = matching_record_values()
+TW_LEVEL_T, TW_MATE_T = matching_record_values(query=True)
 
 
 def fit_alpha(mask, pred):
@@ -57,7 +57,7 @@ def fit_alpha(mask, pred):
     return float(np.clip(np.sum((y[mask] - pred[mask]) * d) / denom, 0, 1)) if denom > 0 else 0.0
 
 
-def apply_twins(pred, level, mate, alphas):
+def apply_matching_correction(pred, level, mate, alphas):
     out = pred.copy()
     for lv, a in alphas.items():
         m = level == lv
@@ -69,8 +69,8 @@ def athlete_features(residual, query=False):
     cols = []
     for k in ATHLETE_KEYS:
         s, n = group_sum(AK_TR[k], residual, AK_TE[k] if query else None)
-        f = s / (n + SHRINK[k])
-        if k != 'M2':
+        f = s / (n + RESIDUAL_SHRINKAGE[k])
+        if k != MATCH_MEET:
             f = f * (VALID_TE if query else VALID_TR)
         cols.append(f)
     return np.column_stack(cols)
@@ -78,22 +78,22 @@ def athlete_features(residual, query=False):
 
 def stage2(oof, test_pred, label):
     alphas = {lv: fit_alpha(TW_LEVEL == lv, oof) for lv in ['exact', 'core']}
-    p1 = apply_twins(oof, TW_LEVEL, TW_MATE, alphas)
+    p1 = apply_matching_correction(oof, TW_LEVEL, TW_MATE, alphas)
     p1_cf = oof.copy()
     for h in (0, 1):
         a_h = {lv: fit_alpha((HALF != h) & (TW_LEVEL == lv), oof) for lv in ['exact', 'core']}
         m = HALF == h
-        p1_cf[m] = apply_twins(oof[m], TW_LEVEL[m], TW_MATE[m], a_h)
-    t1 = apply_twins(test_pred, TW_LEVEL_T, TW_MATE_T, alphas)
+        p1_cf[m] = apply_matching_correction(oof[m], TW_LEVEL[m], TW_MATE[m], a_h)
+    t1 = apply_matching_correction(test_pred, TW_LEVEL_T, TW_MATE_T, alphas)
 
-    r1 = y - p1
-    F, FT = athlete_features(r1), athlete_features(r1, query=True)
+    corrected_residuals = y - p1
+    F, FT = athlete_features(corrected_residuals), athlete_features(corrected_residuals, query=True)
     p2_cf = p1_cf.copy()
     for h in (0, 1):
         fit, m = HALF != h, HALF == h
-        beta_h = np.linalg.lstsq(F[fit], r1[fit], rcond=None)[0]
+        beta_h = np.linalg.lstsq(F[fit], corrected_residuals[fit], rcond=None)[0]
         p2_cf[m] = p1_cf[m] + F[m] @ beta_h
-    beta = np.linalg.lstsq(F, r1, rcond=None)[0]
+    beta = np.linalg.lstsq(F, corrected_residuals, rcond=None)[0]
     gain = rmse(y, p1_cf) - rmse(y, p2_cf)
     use_athlete = bool(gain >= STAGE2_MIN_GAIN)
     t2 = t1 + FT @ beta if use_athlete else t1.copy()
@@ -107,29 +107,29 @@ def stage2(oof, test_pred, label):
 
 
 rows, exports = [], {}
-row, preds = stage2(STACK_OOF, STACK_TEST, f'08 五折堆叠（{BEST_METHOD}）')
+row, preds = stage2(STACK_OOF, STACK_TEST, f'Experiment 08, five-fold stacking({BEST_METHOD})')
 rows.append(row)
 exports['zoo5f'] = preds
 
-V2_SEEDS = {'lgb': [42], 'xgb': [42, 7, 2024], 'catboost': [42, 7, 2024], 'mlp': [42, 7, 2024]}
+TEN_FOLD_ENSEMBLE_SEEDS = {MODEL_LIGHTGBM: [42], MODEL_XGBOOST: [42, 7, 2024], MODEL_CATBOOST_ABSOLUTE: [42, 7, 2024], 'mlp': [42, 7, 2024]}
 try:
     oofs, tests = [], []
-    for model, seeds in V2_SEEDS.items():
+    for model, seeds in TEN_FOLD_ENSEMBLE_SEEDS.items():
         oof, pred = np.zeros(n_train), np.zeros(len(test))
         for seed in seeds:
             for i, (_, valid) in enumerate(KFold(10, shuffle=True, random_state=seed).split(np.arange(n_train))):
-                saved = np.load(V2_DIR / f'{model}_s{seed}_f{i}.npz')
-                require(len(saved['val']) == len(valid) and len(saved['test']) == len(test), 'v2 文件大小不符')
+                saved = np.load(TEN_FOLD_ENSEMBLE_DIR / f'{model}_s{seed}_f{i}.npz')
+                require(len(saved['val']) == len(valid) and len(saved['test']) == len(test), 'v2 file shape mismatch')
                 oof[valid] += saved['val'] / len(seeds)
                 pred += saved['test'] / (10 * len(seeds))
         oofs.append(oof)
         tests.append(pred)
     w2, _ = nnls(np.column_stack(oofs), y)
-    row, preds = stage2(np.column_stack(oofs) @ w2, np.column_stack(tests) @ w2, 'v2（10 折 × 种子，NNLS）')
+    row, preds = stage2(np.column_stack(oofs) @ w2, np.column_stack(tests) @ w2, 'v2 (10 folds per seed, NNLS)')
     rows.append(row)
-    exports['v2'] = preds
+    exports[ENSEMBLE_TEN_FOLD] = preds
 except FileNotFoundError as exc:
-    print('没有找到 v2 的逐折文件，跳过 v2：', exc)
+    print('v2 fold files not found; skipping v2: ', exc)
 
 stage2_table = pd.DataFrame(rows).set_index('base')
 display(stage2_table.round(3).T)
@@ -138,5 +138,5 @@ for name, preds in exports.items():
     for kind, pred in preds.items():
         path = OUTPUT_DIR / f'submission_{name}_{kind}.csv'
         pd.DataFrame({'id': test['id'], TARGET: np.clip(pred, 0, None)}).to_csv(path, index=False)
-        print('写出', path.name)
-print('完成。')
+        print('Saved', path.name)
+print('Done.')

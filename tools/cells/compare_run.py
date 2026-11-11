@@ -8,7 +8,7 @@ def run_new(name, fold):
     started = time.perf_counter()
     p_val, p_test = fit_new(name, SEED, inner_fit, inner_stop, valid_idx, XT_BASE)
     p_val, p_test = np.asarray(p_val, dtype='float64'), np.asarray(p_test, dtype='float64')
-    require(np.isfinite(p_val).all() and np.isfinite(p_test).all(), f'{stem} 预测含非有限值')
+    require(np.isfinite(p_val).all() and np.isfinite(p_test).all(), f'{stem} Non-finite predictions')
     info = save_result(stem, {'valid_idx': valid_idx, 'val': p_val, 'test': p_test},
                        {'model': name, 'fold': fold, 'rmse': rmse(y[valid_idx], p_val),
                         'seconds': time.perf_counter() - started})
@@ -21,6 +21,6 @@ for name in RUN_NEW:
         for fold in range(1, N_FOLDS + 1):
             info, how = run_new(name, fold)
             print(f'{name:8s} fold {fold}  RMSE {info["rmse"]:.3f}  ({how})')
-        print(f'—— {name} 完成，本次运行用时 {(time.perf_counter() - started) / 60:.1f} 分钟')
+        print(f'—— {name} finished; elapsed {(time.perf_counter() - started) / 60:.1f} min')
     except Exception as exc:
-        print(f'!! {name} 运行出错，跳过剩下的折：{exc!r}')
+        print(f'!! {name} failed; skipping remaining folds: {exc!r}')

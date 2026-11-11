@@ -1,18 +1,18 @@
-CONFIG = {'purpose': 'feature round 3 on top of 09 ALL2; inner 10% early stop, score early-stopped model on outer fold',
+CONFIG = {'purpose': CONFIG_PURPOSE_CAREER_ABLATION,
           'seed': SEED, 'n_folds': N_FOLDS, 'inner_stop_fraction': INNER_STOP_FRACTION,
-          'r2_blocks': R2_BLOCKS, 'extras': EXTRAS, 'screen': VARIANTS3, 'data_sha256': EXPECTED_SHA256}
+          'r2_blocks': HISTORY_BASE_BLOCKS, 'extras': MODEL_SPECIFIC_BLOCKS, 'screen': CAREER_VARIANTS, 'data_sha256': EXPECTED_SHA256}
 config_path = OUTPUT_DIR / 'config.json'
 if config_path.is_file():
     require(json.loads(config_path.read_text(encoding='utf-8')) == CONFIG,
-            f'{OUTPUT_DIR.name} 已有不同配置的结果；改动配置时请改 EXPERIMENT_ID')
+            f'{OUTPUT_DIR.name} contains results from another configuration; use a new EXPERIMENT_ID')
 else:
     config_path.write_text(json.dumps(CONFIG, ensure_ascii=False, indent=1), encoding='utf-8')
 
 
 def spec_of(model, variant):
-    Xtr, _, cat_cols = frames3(variant, model)
-    params = {'lgb': LGB_PARAMS, 'xgb': XGB_PARAMS, 'catboost': CB_PARAMS}[model]
-    return {'model': model, 'variant': variant, 'blocks': blocks_for(variant, model),
+    Xtr, _, cat_cols = career_feature_frames(variant, model)
+    params = {MODEL_LIGHTGBM: LGB_PARAMS, MODEL_XGBOOST: XGB_PARAMS, MODEL_CATBOOST_ABSOLUTE: CB_PARAMS}[model]
+    return {'model': model, 'variant': variant, 'blocks': feature_blocks_for_model(variant, model),
             'columns': list(Xtr.columns), 'cat_cols': list(cat_cols), 'params': dict(params),
             'patience': PATIENCE[model]}
 
@@ -23,16 +23,16 @@ def run_one(model, variant, fold):
     spec = spec_of(model, variant)
     if json_path.is_file() and npz_path.is_file():
         saved = json.loads(json_path.read_text(encoding='utf-8'))
-        require(saved['spec'] == spec, f'{stem} 的定义已改变；请改 EXPERIMENT_ID 或变体名')
+        require(saved['spec'] == spec, f'{stem} definition changed; use a new EXPERIMENT_ID or variant name')
         return saved, 'cache'
-    Xtr, Xte, cat_cols = frames3(variant, model)
+    Xtr, Xte, cat_cols = career_feature_frames(variant, model)
     fit_idx = np.flatnonzero(FOLD_IDS != fold)
     valid_idx = np.flatnonzero(FOLD_IDS == fold)
     inner_fit, inner_stop = train_test_split(fit_idx, test_size=INNER_STOP_FRACTION, random_state=SEED)  # = 07
     started = time.perf_counter()
     p_val, p_test, best = fit_predict(model, Xtr.iloc[inner_fit], y[inner_fit], Xtr.iloc[inner_stop],
                                       y[inner_stop], Xtr.iloc[valid_idx], Xte, cat_cols)
-    require(np.isfinite(p_val).all() and np.isfinite(p_test).all(), f'{stem} 预测含非有限值')
+    require(np.isfinite(p_val).all() and np.isfinite(p_test).all(), f'{stem} Non-finite predictions')
     np.savez(npz_path, valid_idx=valid_idx, val=np.asarray(p_val, dtype='float64'),
              test=np.asarray(p_test, dtype='float64'))
     result = {'model': model, 'variant': variant, 'fold': fold, 'spec': spec, 'n_features': int(Xtr.shape[1]),
@@ -52,8 +52,8 @@ def run_variants(variants):
                     continue
                 result, how = run_one(model, variant, fold)
                 print(f'fold {fold}  {model:8s} {variant:4s}  RMSE {result["rmse"]:.3f}  '
-                      f'最佳轮数 {result["best_iteration"]:5d}  ({how})')
-        print(f'—— fold {fold} 完成，本次运行用时 {(time.perf_counter() - fold_started) / 60:.1f} 分钟')
+                      f'best iteration {result["best_iteration"]:5d}  ({how})')
+        print(f'—— fold {fold} finished; elapsed {(time.perf_counter() - fold_started) / 60:.1f} min')
 
 
 run_variants(SCREEN3)

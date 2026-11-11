@@ -1,79 +1,60 @@
-# Powerlifting：预测三项总成绩 TotalKg
+# Performances en powerlifting : prédire `TotalKg`
 
-根据比赛记录预测力量举选手的三项总成绩 `TotalKg`（kg），评估指标 RMSE（越低越好）。训练集 105,000 行、测试集 45,000 行，16 个特征（3 数值 + 13 类别）。
+Projet du Data Challenge d'apprentissage supervisé. Il s'agit de prédire le total des trois mouvements (`TotalKg`, en kg) d'un athlète à partir des informations de sa participation à une compétition. La métrique est la RMSE. Le jeu contient 105 000 lignes d'apprentissage, 45 000 de test et 16 variables (3 numériques, 13 catégorielles).
 
-**最终提交**：[submissions/20261110_v6_meet_smoothing.csv](submissions/20261110_v6_meet_smoothing.csv)，交叉拟合 **75.575**，公开榜 **76.030**（起点 v1 是 78.0）。成对平滑之前的版本是 [submissions/20261017_FINAL_v4_eight_models.csv](submissions/20261017_FINAL_v4_eight_models.csv)：75.966 / 76.298。全部实验数字见 [RESULTS.md](RESULTS.md)，提交记录见 [submissions/README.md](submissions/README.md)。
+**Résultat.** Soumission finale : [submissions/20261110_v6_meet_smoothing.csv](submissions/20261110_v6_meet_smoothing.csv), RMSE locale **75.575**, score public **76.030**. Notre première soumission était à 78.0.
 
-## 5 本 notebook
+Le détail des expériences est dans [RESULTS.md](RESULTS.md) et l'historique des soumissions dans [submissions/README.md](submissions/README.md).
 
-|notebook|内容|结果目录|原实验|
-|---|---|---|---|
-|[01_data_exploration](01_data_exploration.ipynb)|读取与核对原始数据、探索分析、记录精度与「双胞胎」、数据质量检查、固定五折|—|—|
-|[02_feature_engineering](02_feature_engineering.ipynb)|四轮特征：记录精度、跨地参赛、比赛背景、运动员历史与生涯、基于成绩的特征，及五折消融|`artifacts/02_feature_engineering/`|07、09、10、14|
-|[03_model_selection](03_model_selection.ipynb)|早期基线、CatBoost 参数、其他模型与相对力量目标、堆叠方式、目标变量工程、模型大比较|`artifacts/03_model_selection/`|08、13|
-|[04_final_model](04_final_model.ipynb)|8 个模型 × 5 折 × 3 种子 + 全量重训、NNLS 融合、双胞胎 + 同一运动员平滑、成对相似度平滑、提交文件|`artifacts/04_final_model/`|11、12、15–17|
-|[05_error_analysis](05_error_analysis.ipynb)|最终残差、残差结构与第二层、数据清洗实验、未采用的方法、交叉验证与公开榜|—|—|
+## Les cinq notebooks
 
-「实验 07–17」是实验的原始编号。代码注释、RESULTS.md 和提交记录都沿用这些编号，对照见文末。
-
-## 最终方案
-
-|步骤|内容|
+| Notebook | Contenu |
 |---|---|
-|特征|原始 16 列 + 体重级别 + 记录精度 + 跨地参赛 + 比赛背景 + 运动员历史与生涯 + 比赛经验结构；按模型不同（57 / 73 / 78 列）|
-|模型|LightGBM、XGBoost、CatBoost、lgb_rel、cb_rel、cb_gl、TabM、sklearn HGB。`_rel` / `_gl` 预测 DOTS / IPF GL 相对力量，再乘回 kg|
-|验证|`KFold(5, shuffle=True, random_state=种子)` × 3 个种子（42、7、2024）；外层训练部分内留 10% 早停|
-|测试预测|树模型在全部 105,000 行上重训：轮数 = CV 平均最佳轮数 × 1.2，多个种子平均。TabM、HGB 在 95% / 全部数据上重训，内部早停|
-|融合|全局 NNLS；五折嵌套得到诚实分数 76.319|
-|第二层|双胞胎：训练集中特征完全相同的行，把预测拉向其真实成绩。同一运动员残差平滑（S3）：精确出生年、出生年 ±1、时间衰减三种键，线性组合。两者都交叉拟合，75.966|
-|成对平滑|在第二层之后，用 LightGBM 逐对估计「另一条记录的残差有多大参考价值」，按权重汇总邻居残差：先对近似同一运动员的记录，再对同一场比赛 × 性别 × 装备的记录。交叉拟合 75.607 → 75.575|
+| [01_data_exploration](01_data_exploration.ipynb) | lecture des données, exploration, précision de saisie, lignes jumelles, plis |
+| [02_feature_engineering](02_feature_engineering.ipynb) | quatre séries de variables et leurs ablations |
+| [03_model_selection](03_model_selection.ipynb) | premiers essais, réglage de CatBoost, autres modèles, cibles de force relative |
+| [04_final_model](04_final_model.ipynb) | huit modèles × trois graines, combinaison NNLS, corrections, lissage par paires, soumissions |
+| [05_error_analysis](05_error_analysis.ipynb) | résidus, essais abandonnés, score local et score public |
 
-## 运行方式
+Les notebooks sont enregistrés avec leurs sorties : on peut lire les tableaux et les figures sans rien exécuter.
 
-- **数据不在仓库中**：从 Kaggle 竞赛页面 <https://www.kaggle.com/competitions/performances-en-powerlifting/data> 下载 `train.csv`、`test.csv`、`sample_submission.csv`，放到项目根目录的 `data/` 下。notebook 启动时会核对文件的形状和 SHA-256。
-- 整个项目文件夹放在 Google Drive 的 `Colab Notebooks/` 下，在 Colab 打开 notebook，「全部运行」。notebook 会自动找到项目里的 `data/`；本地 Jupyter 也可以运行，依赖见 `requirements.txt`。
-- **默认只读**：所有训练开关为 `False`，只读取 `artifacts/` 中保存的结果，生成表格和图。CPU 运行时即可，每本几分钟。
-- **重新训练**：
-  - 把 notebook 顶部 `TRAIN` 中的一项改为 `True`，运行时类型选 **T4 GPU**；一次只开一个开关。
-  - 每个模型训练完立即写入 `artifacts/`，断线后重新运行会跳过已完成的部分。
-  - 依赖在 notebook 内自动安装（CatBoost 固定 1.2.10，以及 pytabkit）。
-- `artifacts/` 约 400MB，不在 Git 中，完整副本在 Google Drive。
-- 不使用外部数据：OpenPowerlifting 原始库里就有测试行，用它等于标签泄漏。
+## La solution en bref
 
-## 目录
+| Étape | Ce qui est fait |
+|---|---|
+| Variables | les 16 d'origine, la catégorie de poids, la précision de saisie, les déplacements, le contexte de la compétition, l'historique et la carrière du sportif ; 57, 73 ou 78 colonnes selon le modèle |
+| Modèles | LightGBM, XGBoost, CatBoost, TabM, HistGradientBoosting ; LightGBM et CatBoost aussi sur des cibles de force relative (DOTS, IPF GL) |
+| Validation | 5 plis × 3 graines (42, 7, 2024), 10 % de la partie d'apprentissage réservés à l'early stopping |
+| Test | modèles réentraînés sur toutes les lignes, plusieurs graines |
+| Combinaison | moindres carrés non négatifs (NNLS) : 76.319 |
+| Corrections | lignes jumelles, lissage des résidus par groupes (75.966), puis lissage par paires (75.575) |
 
+Les corrections utilisent les autres résultats connus d'un même sportif. Leurs scores locaux sont obtenus en ajustant les coefficients sur une moitié des données et en les évaluant sur l'autre ; ce n'est pas une validation de toute la chaîne (voir le rapport).
+
+## Données
+
+Les données ne sont pas dans le dépôt. Télécharger `train.csv`, `test.csv` et `sample_submission.csv` depuis la [page Kaggle de la compétition](https://www.kaggle.com/competitions/performances-en-powerlifting/data) et les placer dans `data/`. Les notebooks vérifient l'empreinte des fichiers au démarrage.
+
+Nous n'utilisons aucune donnée externe : la base OpenPowerlifting contient les lignes du test.
+
+## Exécution
+
+- **Lire seulement** : ouvrir les notebooks, les sorties sont déjà là.
+- **Réexécuter sans entraîner** : par défaut tous les boutons `TRAIN` sont à `False` et les notebooks relisent les prédictions sauvegardées dans `artifacts/`. Ce dossier (environ 470 Mo) n'est pas dans le dépôt ; sans lui, il faut réentraîner.
+- **Réentraîner** : sur Colab avec un GPU T4, placer le dossier du projet dans `MyDrive/Colab Notebooks/` (ou définir `PL_PROJECT_DIR`), mettre un bouton à `True` et exécuter. Un seul bouton à la fois, en redémarrant le runtime entre deux.
+- **Tout refaire depuis zéro** : dans 04, `six_models` (environ 2 h 30), `more_seeds` (1 h), `eight_models` (1 h), puis `pair_smoothing` (CPU). Les notebooks 02 et 03 ne sont nécessaires que pour refaire les ablations.
+
+Dépendances : [requirements.txt](requirements.txt). CatBoost 1.2.10 et pytabkit sont installés par les notebooks quand un entraînement est lancé.
+
+## Organisation
+
+```text
+01–05 *.ipynb      les cinq notebooks
+data/              CSV de la compétition (à télécharger)
+artifacts/         prédictions et résultats sauvegardés (hors dépôt)
+submissions/       fichiers soumis et historique des scores
+tools/             code des cellules, textes et générateur des notebooks, lissage par paires
+RESULTS.md         résultats des expériences
 ```
-data/                                     原始数据（只读，不在 Git 中，需自行下载）：train.csv、test.csv、sample_submission.csv
-01–05 *.ipynb                             5 本 notebook
-artifacts/                                实验结果（不在 Git 中）
-  02_feature_engineering/round1–round4    实验 07、09、10、14
-  03_model_selection/baseline_v1、v2      早期 v1、v2 的逐折预测
-  03_model_selection/model_zoo            实验 08
-  03_model_selection/model_compare        实验 13（含 v3_plus 提交）
-  04_final_model/v1_six_models            实验 11
-  04_final_model/v2_more_seeds            实验 12
-  04_final_model/v4_eight_models          实验 15（成对平滑之前的版本）
-  04_final_model/v5_pair_smoothing        实验 16–17（最终提交）
-submissions/                              最终提交文件与完整提交记录
-tools/                                    生成 5 本 notebook 的脚本、成对平滑脚本（见 tools/README.md）
-RESULTS.md                                全部实验结果
-```
 
-## 原实验编号对照
-
-|原 notebook|内容|现在的位置|原结果目录 → 现在|
-|---|---|---|---|
-|`eda`、`modeling`、`feature_engineering`、`pipeline`|早期探索、sklearn 基线、本地 LightGBM / CatBoost|01、03 第 1 节|—|
-|`colab_gpu_pipeline`、`_v2`|v1、v2：XGBoost / CatBoost / MLP（/ LightGBM）多种子融合|03 第 1 节|`outputs/`、`outputs_v2/` → `03_model_selection/baseline_v1`、`baseline_v2`|
-|07|第一轮特征 + CatBoost 参数 + 双胞胎|02 第 5.1 节、03 第 2 节|`feature_round1_v1` → `02_feature_engineering/round1`|
-|08|其他模型 + 堆叠 + 同一运动员平滑|03 第 3 节、05 第 2 节|`model_zoo_v1_ALL` → `03_model_selection/model_zoo`|
-|09|第二轮特征|02 第 5.2 节|`feature_round2_v1` → `02_feature_engineering/round2`|
-|10|第三轮特征 + 第二层平滑比较|02 第 5.3 节、05 第 2 节|`feature_round3_v1` → `02_feature_engineering/round3`|
-|11|6 个模型的最终集成 + 数据清洗实验|04 第 1 节、05 第 3 节|`final_v1` → `04_final_model/v1_six_models`|
-|12|更多全量重训种子 + TabM 近全量 + 学习率检查|04 第 2 节、03 第 6 节|`final_v2` → `04_final_model/v2_more_seeds`|
-|13|其他模型大比较 + v3_plus|03 第 5 节、04 第 3 节|`model_compare_v1` → `03_model_selection/model_compare`|
-|14|第四轮特征 + id 检查 + 目标变量工程|02 第 5.4 节、01、03 第 4 节|`feature_round4_v1` → `02_feature_engineering/round4`|
-|15|8 个模型的最终版|04 第 4 节|`final_v3` → `04_final_model/v4_eight_models`|
-|16、17|成对相似度平滑（运动员、比赛层）|04 第 5 节|`06_pair_smoothing` → `04_final_model/v5_pair_smoothing`|
-
-实验 07–15 的原始 notebook（带 Colab 运行输出）和生成它们的脚本保存在 Git 历史的第一个提交中。
+Les numéros d'expérience (07 à 17) qui apparaissent dans le code et les tableaux sont ceux de notre journal de travail. Les premiers notebooks de travail, avant réorganisation, sont dans le premier commit du dépôt.

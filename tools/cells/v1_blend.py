@@ -7,7 +7,7 @@ def load_seed(model, seed):
         saved = np.load(path)
         oof[saved['valid_idx']] = saved['val']
         test_pred += saved['test'] / N_FOLDS
-    require(not np.isnan(oof).any(), f'{model} 种子 {seed} 的 OOF 不完整')
+    require(not np.isnan(oof).any(), f'{model} seed {seed} has incomplete OOF predictions')
     return oof, test_pred
 
 
@@ -26,7 +26,7 @@ for model in FINAL_MODELS:
     fold_avg = np.mean([t for _, t in loaded.values()], axis=0)
     fulls = [np.load(OUTPUT_DIR / f'{model}__s{s}__full.npz')['test'] for s in loaded
              if (OUTPUT_DIR / f'{model}__s{s}__full.npz').is_file()]
-    full = np.mean(fulls, axis=0) if fulls else fold_avg          # TabM 没有全量重训，用折平均
+    full = np.mean(fulls, axis=0) if fulls else fold_avg          # No full TabM refit here; use fold-averaged predictions.
     PER_MODEL[model] = {'oof': oof, 'fold_avg': fold_avg, 'full': full}
     rows.append({'model': model, 'seeds': list(loaded), 'full_refits': len(fulls),
                  **{f'oof_seed{s}': rmse(y, o) for s, (o, _) in loaded.items()},
@@ -36,18 +36,18 @@ display(model_table.round(3))
 model_table.to_csv(OUTPUT_DIR / 'summary_models.csv')
 
 NAMES = list(PER_MODEL)
-P = np.column_stack([PER_MODEL[n]['oof'] for n in NAMES])
-WEIGHTS, _ = nnls(P, y)
+oof_prediction_matrix = np.column_stack([PER_MODEL[n]['oof'] for n in NAMES])
+WEIGHTS, _ = nnls(oof_prediction_matrix, y)
 NESTED = np.zeros(n_train)
-for k in range(1, N_FOLDS + 1):                       # 诚实分数：每一折的权重只用其他四折拟合
+for k in range(1, N_FOLDS + 1):                       # Fit weights on four groups of existing OOF, evaluate on the fifth; this is not full nested CV.
     fit, va = FOLD_IDS != k, FOLD_IDS == k
-    w_k, _ = nnls(P[fit], y[fit])
-    NESTED[va] = P[va] @ w_k
+    w_k, _ = nnls(oof_prediction_matrix[fit], y[fit])
+    NESTED[va] = oof_prediction_matrix[va] @ w_k
 BLEND_TEST = {kind: np.column_stack([PER_MODEL[n][kind] for n in NAMES]) @ WEIGHTS for kind in ['fold_avg', 'full']}
 BLEND_TEST['hybrid'] = 0.5 * (BLEND_TEST['fold_avg'] + BLEND_TEST['full'])
-print('NNLS 权重：', dict(zip(NAMES, WEIGHTS.round(3))), '｜权重和', round(float(WEIGHTS.sum()), 4))
-print(f'融合 OOF：权重同一份 OOF 拟合 {rmse(y, P @ WEIGHTS):.3f}，嵌套（诚实）{rmse(y, NESTED):.3f}')
-print('三种测试预测之间的平均绝对差：',
+print('NNLS Weights: ', dict(zip(NAMES, WEIGHTS.round(3))), '| sum of weights', round(float(WEIGHTS.sum()), 4))
+print(f'OOF blend: in-sample weights {rmse(y, oof_prediction_matrix @ WEIGHTS):.3f}, cross-fitted weights {rmse(y, NESTED):.3f}')
+print('Mean absolute differences between test variants: ',
       {f'{a}-{b}': round(float(np.abs(BLEND_TEST[a] - BLEND_TEST[b]).mean()), 2)
        for a, b in [('fold_avg', 'full'), ('fold_avg', 'hybrid'), ('full', 'hybrid')]})
 pd.DataFrame({'model': NAMES, 'weight': WEIGHTS}).to_csv(OUTPUT_DIR / 'summary_weights.csv', index=False)

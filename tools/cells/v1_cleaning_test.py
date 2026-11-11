@@ -2,11 +2,11 @@ if RUN_CLEANING_TEST:
     ratio = y / train['BodyweightKg'].to_numpy(dtype='float64')
     SUSPICIOUS = (np.where(train['Sex'].to_numpy() == 'M', ratio < 2.5, ratio < 1.8)
                   | (train['Age'].to_numpy(dtype='float64') < 5))
-    print(f'疑似行：{int(SUSPICIOUS.sum())}（{SUSPICIOUS.mean():.2%}）')
+    print(f'Flagged rows: {int(SUSPICIOUS.sum())}({SUSPICIOUS.mean():.2%})')
     clean_rows = []
-    for model in [m for m in ['lgb', 'xgb', 'catboost'] if m in RUN_MODELS]:
+    for model in [m for m in [MODEL_LIGHTGBM, MODEL_XGBOOST, MODEL_CATBOOST_ABSOLUTE] if m in RUN_MODELS]:
         if not all((OUTPUT_DIR / f'{model}__s{SEED}__fold{k}.npz').is_file() for k in range(1, N_FOLDS + 1)):
-            print(f'{model}：种子 {SEED} 的五折还没跑完，跳过对照')
+            print(f'{model}: seed {SEED} has incomplete CV; skip this comparison')
             continue
         base_folds, clean_folds, base_normal, clean_normal = [], [], [], []
         for fold in range(1, N_FOLDS + 1):
@@ -36,5 +36,5 @@ if RUN_CLEANING_TEST:
     clean_table = pd.DataFrame(clean_rows).set_index('model')
     display(clean_table.round(3))
     clean_table.to_csv(OUTPUT_DIR / 'summary_cleaning_test.csv')
-    print('delta_all_rows < 0 表示去掉疑似行后在全部验证行上更好；normal_rows 只看非疑似的验证行。')
-print('完成。')
+    print('delta_all_rows < 0 favors removal on all validation rows; normal_rows excludes flagged validation rows.')
+print('Done.')

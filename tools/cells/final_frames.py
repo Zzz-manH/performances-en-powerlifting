@@ -1,7 +1,7 @@
-# ---- 最终特征：10 的 ALL3（三个块都达标）----
-_FRAMES3.clear()
-VARIANTS3['ALL3'] = ['H2', 'E', 'PM']
-FAMILY = {'lgb': 'lgb', 'lgb_rel': 'lgb', 'tabm': 'lgb', 'xgb': 'xgb', 'catboost': 'catboost', 'cb_rel': 'catboost'}
-FRAMES = {m: frames3('ALL3', FAMILY[m]) for m in FINAL_MODELS}
+# ---- Final features: Variables finales par modèle from experiment 10----
+_CAREER_FRAMES.clear()
+CAREER_VARIANTS[VARIANT_FINAL_FEATURES] = [BLOCK_ATHLETE_CAREER, BLOCK_MEET_EXPERIENCE, BLOCK_MODEL_SPECIFIC]
+FAMILY = {MODEL_LIGHTGBM: MODEL_LIGHTGBM, MODEL_LIGHTGBM_DOTS: MODEL_LIGHTGBM, 'tabm': MODEL_LIGHTGBM, MODEL_XGBOOST: MODEL_XGBOOST, MODEL_CATBOOST_ABSOLUTE: MODEL_CATBOOST_ABSOLUTE, MODEL_CATBOOST_DOTS: MODEL_CATBOOST_ABSOLUTE}
+FRAMES = {m: career_feature_frames(VARIANT_FINAL_FEATURES, FAMILY[m]) for m in FINAL_MODELS}
 for m, (Xtr_m, Xte_m, cats_m) in FRAMES.items():
-    print(f'{m:9s} {Xtr_m.shape[1]} 列（{len(cats_m)} 个类别列），块：{blocks_for("ALL3", FAMILY[m])}')
+    print(f'{m:9s} {Xtr_m.shape[1]} columns ({len(cats_m)} categorical), blocks: {feature_blocks_for_model(VARIANT_FINAL_FEATURES, FAMILY[m])}')

@@ -14,7 +14,7 @@ def fold_rmse(pred):
     return pd.Series({k: rmse(y[FOLD_IDS == k], pred[FOLD_IDS == k]) for k in range(1, N_FOLDS + 1)})
 
 
-def paired_table(preds, base='R3'):
+def paired_table(preds, base=VARIANT_FINAL_BASELINE):
     base_folds = fold_rmse(preds[base])
     rows = []
     for name, pred in preds.items():
@@ -38,26 +38,26 @@ def blend_variant(variant, models=SCREEN_MODELS):
 
 
 for model in SCREEN_MODELS:
-    preds = {v: load_oof(model, v)[0] for v in VARIANTS4 if load_oof(model, v) is not None}
-    if 'R3' in preds:
+    preds = {v: load_oof(model, v)[0] for v in PERFORMANCE_VARIANTS if load_oof(model, v) is not None}
+    if VARIANT_FINAL_BASELINE in preds:
         print(f'\n=== {model}')
         display(paired_table(preds).round(3))
-BLENDS = {v: blend_variant(v) for v in VARIANTS4}
+BLENDS = {v: blend_variant(v) for v in PERFORMANCE_VARIANTS}
 BLENDS = {v: b for v, b in BLENDS.items() if b is not None}
-require('R3' in BLENDS, 'R3 还没有全部完成')
+require(VARIANT_FINAL_BASELINE in BLENDS, 'Les résultats de la référence avec variables finales sont incomplets')
 blend_table = paired_table({v: b['oof'] for v, b in BLENDS.items()})
 blend_table['weights_lgb_xgb_cbrel'] = [str(BLENDS[v]['weights']) for v in blend_table.index]
-print('\n=== 三模型 NNLS 融合（主要判读依据）')
+print('\n=== Three-model NNLS blend')
 display(blend_table.round(3))
 blend_table.to_csv(OUTPUT_DIR / 'summary_blend_screen.csv')
-KEPT4 = [v for v in VARIANTS4 if v != 'R3' and v in blend_table.index and bool(blend_table.loc[v, 'keep'])]
-print('达标的新块：', KEPT4 or '无')
+KEPT4 = [v for v in PERFORMANCE_VARIANTS if v != VARIANT_FINAL_BASELINE and v in blend_table.index and bool(blend_table.loc[v, 'keep'])]
+print('Retained blocks: ', KEPT4 or 'none')
 if len(KEPT4) >= 2:
-    VARIANTS4['ALL4'] = [b for v in KEPT4 for b in VARIANTS4[v]]
-    run_variants(['ALL4'], SCREEN_MODELS)
-    BLENDS['ALL4'] = blend_variant('ALL4')
-    display(paired_table({v: BLENDS[v]['oof'] for v in ['R3'] + KEPT4 + ['ALL4']}).round(3))
-FINAL4 = 'ALL4' if 'ALL4' in BLENDS else (KEPT4[0] if KEPT4 else None)
+    PERFORMANCE_VARIANTS[VARIANT_PERFORMANCE_COMBINED] = [b for v in KEPT4 for b in PERFORMANCE_VARIANTS[v]]
+    run_variants([VARIANT_PERFORMANCE_COMBINED], SCREEN_MODELS)
+    BLENDS[VARIANT_PERFORMANCE_COMBINED] = blend_variant(VARIANT_PERFORMANCE_COMBINED)
+    display(paired_table({v: BLENDS[v]['oof'] for v in [VARIANT_FINAL_BASELINE] + KEPT4 + [VARIANT_PERFORMANCE_COMBINED]}).round(3))
+FINAL4 = VARIANT_PERFORMANCE_COMBINED if VARIANT_PERFORMANCE_COMBINED in BLENDS else (KEPT4[0] if KEPT4 else None)
 if FINAL4 is None and len(blend_table) > 1:
-    FINAL4 = blend_table.index[0] if blend_table.index[0] != 'R3' else blend_table.index[1]
-print('与 R3 做净收益比较的变体：', FINAL4)
+    FINAL4 = blend_table.index[0] if blend_table.index[0] != VARIANT_FINAL_BASELINE else blend_table.index[1]
+print('Variante comparée à la référence avec variables finales après post-traitement : ', FINAL4)

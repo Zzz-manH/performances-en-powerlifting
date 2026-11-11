@@ -1,15 +1,18 @@
-"""实验 16–17：成对相似度平滑。
+"""Expériences 16–17 : lissage par paires.
 
-第三层（实验 16，A_pair）：在 v4 的「融合 → 双胞胎」之后，用一个成对模型估计「训练行 j 的残差对行 i
-有多大参考价值」（近似同一运动员：同 Sex × Country × State、出生年相差 ≤ 1），按权重汇总邻居残差。
-第四层（实验 17，G/H）：在 A_pair 的残差上，对「同一场比赛 × 性别 × 装备」的行再做一次同样的成对平滑。
+Premier passage (expérience 16, A_pair) : après la combinaison et la correction des lignes jumelles,
+un modèle de paires estime ce que le résidu d'une ligne d'apprentissage j dit de celui d'une ligne i
+(même sexe, pays et État ; années de naissance à un an près). Les résidus voisins sont agrégés avec ces poids.
+Second passage (expérience 17, G / H) : la même chose sur les résidus de A_pair, pour les lignes
+d'une même compétition, de mêmes sexe et équipement.
 
-只读取已保存的 OOF / 测试预测，不重训第一层模型；只用 CPU，内存峰值约 6 GB。
+Le script relit les prédictions sauvegardées, ne réentraîne aucun modèle de base et tourne sur CPU
+(environ 6 Go de mémoire).
 
-用法：python pair_smoothing.py <项目根目录> [输出目录]
-环境变量：NR（成对模型轮数，默认 300）、BAGS（成对模型种子数，默认 2）
-输出：summary_experiments.csv、每个方案一份 submission_v5_<方案>.csv 和 oof_v5_<方案>.npy；
-      第三层的特征缓存在 pair_feats_A.npz，重跑时直接读取。
+Usage : python pair_smoothing.py <racine du projet> [dossier de sortie]
+Variables d'environnement : NR (itérations du modèle de paires, 300 par défaut), BAGS (graines, 2 par défaut)
+Sorties : summary_experiments.csv, puis pour chaque variante submission_v5_<variante>.csv et oof_v5_<variante>.npy.
+Les agrégats du premier passage sont mis en cache dans pair_feats_A.npz.
 """
 import os, sys, hashlib
 from pathlib import Path
@@ -25,12 +28,14 @@ OUTPUT_DIR = Path(sys.argv[2]) if len(sys.argv) > 2 else ROOT / 'artifacts/04_fi
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 N_FOLDS, SEED = 5, 42
 NR, BAGS = int(os.environ.get('NR', 300)), int(os.environ.get('BAGS', 2))
-MEET_CAP = 300                          # 比赛组内训练行超过这个数就不建候选对（大组里没有信号）
+MEET_CAP = 300                          # pas de paires dans les groupes de compétition plus grands (pas de signal)
 EXPECTED_SHA256 = {}
-display = lambda x: print(x)
+_display = lambda *values, **kwargs: print(*values)      # utilisé par naming_compatibility hors notebook
 CORE9 = ['Age', 'BodyweightKg', 'MeetYear', 'Sex', 'Federation', 'MeetCountry', 'MeetState', 'Country', 'State']
 
-# ---- 复用项目原有单元：读数据、双胞胎 + S3（得到 p1_cf、r1、F、FT、HALF、alphas …）
+# ---- Cellules du projet réutilisées : lecture des données, jumelles et lissage par groupes
+#      (elles définissent p1_cf, corrected_residuals, F, FT, HALF, alphas…)
+exec((CELLS / 'naming_compatibility.py').read_text())
 exec((CELLS / 'data_load.py').read_text())
 NESTED = np.load(V4 / 'oof_nested_blend.npy')
 BLEND_TEST = {}
@@ -38,9 +43,11 @@ exec((CELLS / 'stage2_twins_s3.py').read_text().replace('np.save(OUTPUT_DIR', 'p
 BASE_TEST = pd.read_csv(V4 / 'submission_final_v4_base.csv')
 assert (BASE_TEST['id'].to_numpy() == test['id'].to_numpy()).all()
 base_test = BASE_TEST[TARGET].to_numpy(dtype='float64')
+r1 = corrected_residuals
+apply_twins = apply_matching_correction
 REF = rmse(y, p2_cf)
 
-# ---- 每行的属性数组；候选对只保存行号 (i, j)：i 为任意行（train+test），j 为有标签的训练行
+# ---- Attributs de chaque ligne ; une paire est un couple d'indices (i, j) : i quelconque, j dans l'apprentissage
 ALLF = pd.concat([TR[RAW_FEATURES], TE[RAW_FEATURES]], ignore_index=True)
 N = len(ALLF)
 
@@ -66,7 +73,7 @@ QA = {c: Q[c].to_numpy() for c in Q.columns}
 
 
 def build_athlete():
-    """同 Sex|Country|State（国家已知），出生年相差 ≤ 1；两个 .5 年龄的出生年是精确的，必须相同。"""
+    """Même sexe, pays et État (pays connu), années de naissance à un an près ; deux âges en .5 donnent une année exacte, qui doit être la même."""
     left = Q.loc[Q.known == 1, ['i', 'g', 'by']]
     right = left[left.i < n_train].rename(columns={'i': 'j'})
     out = []
@@ -79,7 +86,7 @@ def build_athlete():
 
 
 def build_meet():
-    """同一场比赛（联盟 × 年份 × 比赛国 × 比赛州）× 性别 × 装备。"""
+    """Même compétition (fédération × année × pays × État) × sexe × équipement."""
     right = Q.loc[Q.i < n_train, ['i', 'mk']].rename(columns={'i': 'j'})
     right = right[right.groupby('mk')['j'].transform('size') <= MEET_CAP]
     m = Q[['i', 'mk']].merge(right, on='mk')
@@ -97,7 +104,7 @@ PARAMS = dict(objective='regression', learning_rate=0.05, num_leaves=31, min_dat
 
 
 def pair_features(builder, PF, resid, tag):
-    """resid：训练行的残差。返回 (训练特征, 测试特征)，各 5 列。"""
+    """resid : résidus des lignes d'apprentissage. Renvoie (agrégats apprentissage, agrégats test), 5 colonnes chacun."""
     idx_i, idx_j, dby = builder()
     n_pairs = len(idx_i)
     dbw = np.abs(QA['bw'][idx_i] - QA['bw'][idx_j])
@@ -127,10 +134,10 @@ def pair_features(builder, PF, resid, tag):
     r_all[:n_train] = resid
     is_tr = idx_i < n_train
     rj = r_all[idx_j]
-    target = (r_all[idx_i] * rj / float(np.var(resid))).astype('float32')    # 测试行为 0，不参与训练
+    target = (r_all[idx_i] * rj / float(np.var(resid))).astype('float32')    # 0 pour les lignes de test, qui ne servent pas à l'ajustement
     half_i = np.where(is_tr, HALF[np.minimum(idx_i, n_train - 1)], -1)
     half_j = HALF[idx_j]
-    print(f'[{tag}] 候选对 {n_pairs:,}（train-train {int(is_tr.sum()):,}）', flush=True)
+    print(f'[{tag}] {n_pairs:,} paires candidates, dont {int(is_tr.sum()):,} entre lignes d\'apprentissage', flush=True)
 
     def fit_predict(fit, ev, p):
         booster = lgb.train(p, lgb.Dataset(X[fit], target[fit], feature_name=PF, free_raw_data=True), NR)
@@ -139,15 +146,15 @@ def pair_features(builder, PF, resid, tag):
     s_hat = np.zeros(n_pairs)
     for b in range(BAGS):
         p = dict(PARAMS, seed=SEED + b)
-        for h in (0, 1):                    # 交叉拟合：训练对的两行都不在被预测的半边
+        for h in (0, 1):                    # croisement : les deux lignes d'une paire d'ajustement sont hors de la moitié prédite
             ev = half_i == h
             s_hat[ev] += fit_predict((half_i == 1 - h) & (half_j == 1 - h), ev, p) / BAGS
         s_hat[~is_tr] += fit_predict(is_tr, ~is_tr, p) / BAGS
-        print(f'[{tag}] 成对模型 {b + 1}/{BAGS} 完成', flush=True)
+        print(f'[{tag}] modèle de paires {b + 1}/{BAGS} terminé', flush=True)
     del X
     sp = np.clip(s_hat, 0, None)
     sr, s, s2 = (np.bincount(idx_i, weights=w, minlength=N) for w in (sp * rj, sp, sp * sp))
-    order = np.lexsort((sp, idx_i))                          # 每个 i 权重最大的邻居
+    order = np.lexsort((sp, idx_i))                          # voisin de plus fort poids pour chaque i
     last = np.r_[idx_i[order][1:] != idx_i[order][:-1], True]
     top = np.zeros(N)
     top[idx_i[order][last]] = (sp * rj)[order][last]
@@ -156,7 +163,7 @@ def pair_features(builder, PF, resid, tag):
 
 
 def solve(Fm, target, ridge=0.0):
-    """最小二乘；ridge > 0 时对标准化后的列加 ridge × 行数 的 L2 惩罚。"""
+    """Moindres carrés ; si ridge > 0, pénalité L2 de ridge × nombre de lignes sur les colonnes standardisées."""
     if ridge == 0:
         return np.linalg.lstsq(Fm, target, rcond=None)[0]
     scale = Fm.std(axis=0) + 1e-12
@@ -173,7 +180,7 @@ def crossfit(base, resid, Fm, ridge=0.0):
 
 
 v4_sub = pd.read_csv(V4 / 'submission_final_v4_final.csv')[TARGET].to_numpy()
-rows = [{'方案': 'v4（现有最终方案）', 'oof_rmse': REF}]
+rows = [{'variante': 'v4 (huit modèles, lissage par groupes)', 'oof_rmse': REF}]
 
 
 def record(name, oof, test_pred, ref_oof):
@@ -181,35 +188,35 @@ def record(name, oof, test_pred, ref_oof):
     pd.DataFrame({'id': test['id'], TARGET: final}).to_csv(OUTPUT_DIR / f'submission_v5_{name}.csv', index=False)
     np.save(OUTPUT_DIR / f'oof_v5_{name}.npy', oof)
     better = lambda m: rmse(y[m], oof[m]) < rmse(y[m], ref_oof[m])
-    rows.append({'方案': name, 'oof_rmse': rmse(y, oof), '相对 v4': rmse(y, oof) - REF,
-                 '相对上一层': rmse(y, oof) - rmse(y, ref_oof),
-                 '改善的折数': sum(better(FOLD_IDS == k) for k in range(1, 6)),
-                 '改善的半边': sum(better(HALF == h) for h in (0, 1)),
-                 '与 v4 提交的平均差': float(np.abs(v4_sub - final).mean())})
+    rows.append({'variante': name, 'oof_rmse': rmse(y, oof), 'ecart_v4': rmse(y, oof) - REF,
+                 'ecart_etape_precedente': rmse(y, oof) - rmse(y, ref_oof),
+                 'plis_ameliores': sum(better(FOLD_IDS == k) for k in range(1, 6)),
+                 'moities_ameliorees': sum(better(HALF == h) for h in (0, 1)),
+                 'ecart_abs_moyen_soumission_v4': float(np.abs(v4_sub - final).mean())})
     print(f'{name}: {rmse(y, oof):.3f}', flush=True)
 
 
-# ---- 第三层 A_pair：S3 + 近似同一运动员的成对平滑（特征有缓存就直接读）
+# ---- Premier passage, A_pair : lissage par groupes + paires de sportifs approchés (cache relu s'il existe)
 cache = OUTPUT_DIR / 'pair_feats_A.npz'
 if cache.is_file() and int(np.load(cache)['nr']) == NR and int(np.load(cache)['bags']) == BAGS:
     A_TR, A_TE = np.load(cache)['train'], np.load(cache)['test']
-    print('读取缓存', cache.name)
+    print('Cache relu :', cache.name)
 else:
-    A_TR, A_TE = pair_features(build_athlete, PF_ATHLETE, r1, '运动员')
+    A_TR, A_TE = pair_features(build_athlete, PF_ATHLETE, r1, 'sportifs')
     np.savez(cache, train=A_TR, test=A_TE, nr=NR, bags=BAGS)
 FA, FTA = np.column_stack([F, A_TR]), np.column_stack([FT, A_TE])
 oof_A = crossfit(p1_cf, r1, FA)
 test_A = apply_twins(base_test, T_MATE, T_LEVEL, alphas) + FTA @ solve(FA, r1)
 record('A_pair', oof_A, test_A, p2_cf)
 
-# ---- 第四层：在 A_pair 的残差上，同一场比赛 × 性别 × 装备 的成对平滑
+# ---- Second passage : sur les résidus de A_pair, paires d'une même compétition × sexe × équipement
 r3 = y - oof_A
-M_TR, M_TE = pair_features(build_meet, PF_MEET, r3, '比赛')
+M_TR, M_TE = pair_features(build_meet, PF_MEET, r3, 'compétitions')
 for name, ridge in [('G_meet', 0.0), ('H_meet_ridge', 1e-2)]:
     record(name, crossfit(oof_A, r3, M_TR, ridge), test_A + M_TE @ solve(M_TR, r3, ridge), oof_A)
 
-table = pd.DataFrame(rows).set_index('方案')
+table = pd.DataFrame(rows).set_index('variante')
 table.to_csv(OUTPUT_DIR / 'summary_experiments.csv')
 pd.set_option('display.width', 250)
 print(table.round(3).to_string())
-print('结果写入', OUTPUT_DIR)
+print('Résultats écrits dans', OUTPUT_DIR)

@@ -257,10 +257,10 @@ NOTEBOOK_MAP = '''
 | **01_data_exploration** | 读取与核对原始数据、探索分析、记录精度与「双胞胎」、数据质量检查、固定五折 |
 | **02_feature_engineering** | 四轮特征（记录精度、跨地参赛、比赛背景、运动员历史与生涯、基于成绩的特征）及五折消融（实验 07、09、10、14） |
 | **03_model_selection** | 早期基线、CatBoost 参数、其他模型与相对力量目标、堆叠方式、目标变量工程、模型大比较（实验 08、13） |
-| **04_final_model** | 最终集成：8 个模型 × 5 折 × 3 种子 + 全量重训、NNLS 融合、双胞胎 + 同一运动员平滑、提交文件（实验 11、12、15） |
+| **04_final_model** | 最终集成：8 个模型 × 5 折 × 3 种子 + 全量重训、NNLS 融合、双胞胎 + 同一运动员平滑、成对相似度平滑、提交文件（实验 11、12、15–17） |
 | **05_error_analysis** | 最终残差、同一运动员与双胞胎结构、第二层做法比较、数据清洗实验、未采用的方法、交叉验证与公开榜 |
 
-原始数据在 `data/`；结果保存在 `artifacts/` 下与 notebook 同名的目录。「实验 07–15」是实验的原始编号，代码注释和 RESULTS.md 沿用这些编号。
+原始数据在 `data/`；结果保存在 `artifacts/` 下与 notebook 同名的目录。「实验 07–17」是实验的原始编号，代码注释和 RESULTS.md 沿用这些编号。
 '''
 
 # ============================================================================= 01
@@ -1181,8 +1181,63 @@ def show_v4():
 show_v4()
 '''
 
+PAIR_RUN = '''
+# 实验 16–17（结果目录：artifacts/04_final_model/v5_pair_smoothing）
+subprocess.check_call([sys.executable, '-m', 'pip', 'install', '-q', 'lightgbm'])
+process = subprocess.Popen([sys.executable, '-W', 'ignore', str(PROJECT_DIR / 'tools' / 'pair_smoothing.py'),
+                            str(PROJECT_DIR)], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+for line in process.stdout:
+    print(line, end='')
+require(process.wait() == 0, 'tools/pair_smoothing.py 运行失败')
+'''
+
+SHOW_V5 = '''
+def show_v5():
+    """从保存的 OOF 重新计算各层后处理的分数（只读，不训练）。"""
+    v4 = ARTIFACTS / '04_final_model' / 'v4_eight_models'
+    v5 = ARTIFACTS / '04_final_model' / 'v5_pair_smoothing'
+    steps = [('8 个模型融合（嵌套）', v4 / 'oof_nested_blend.npy', np.nan),
+             ('+ 双胞胎 + S3（实验 15，v4）', v4 / 'oof_final_crossfit.npy', 76.298),
+             ('+ 运动员成对平滑（实验 16）', v5 / 'oof_v5_A_pair.npy', 76.089),
+             ('+ 比赛层成对平滑（实验 17，最终）', v5 / 'oof_v5_H_meet_ridge.npy', 76.030)]
+    if not all(path.is_file() for _, path, _ in steps):
+        print('缺少成对平滑的结果：请确认 artifacts/ 已从 Drive 同步，或打开 pair_smoothing 开关')
+        return
+    rows, previous = [], None
+    for name, path, public in steps:
+        oof = np.load(path)
+        row = {'步骤': name, 'OOF RMSE': rmse(y, oof), '公开榜': public}
+        if previous is not None:
+            row['相对上一步'] = rmse(y, oof) - rmse(y, previous)
+            row['改善的折数'] = sum(rmse(y[FOLD_IDS == k], oof[FOLD_IDS == k]) < rmse(y[FOLD_IDS == k], previous[FOLD_IDS == k])
+                               for k in range(1, N_FOLDS + 1))
+        rows.append(row)
+        previous = oof
+    table = pd.DataFrame(rows).set_index('步骤')
+    display(table.round(3))
+
+    fig, ax = plt.subplots(figsize=(8, 3.2))
+    x = np.arange(len(table))
+    ax.plot(x, table['OOF RMSE'], marker='o', label='交叉拟合 OOF')
+    ax.plot(x, table['公开榜'], marker='s', linestyle='--', label='公开榜')
+    for i, (cv, public) in enumerate(zip(table['OOF RMSE'], table['公开榜'])):
+        ax.annotate(f'{cv:.3f}', (i, cv), xytext=(0, -14), textcoords='offset points', ha='center')
+        if np.isfinite(public):
+            ax.annotate(f'{public:.3f}', (i, public), xytext=(0, 7), textcoords='offset points', ha='center')
+    ax.set_xticks(x, ['融合', '+ 双胞胎 + S3', '+ 运动员成对', '+ 比赛层成对'])
+    ax.set_ylabel('RMSE（kg）')
+    ax.legend()
+    plt.show()
+
+    print('实验 16–17 保存的结果表：')
+    show(read_summary(v5 / 'summary_experiments.csv'))
+
+
+show_v5()
+'''
+
 FINAL_FILE_CHECK = '''
-final_file = ARTIFACTS / '04_final_model' / 'v4_eight_models' / 'submission_final_v4_final.csv'
+final_file = ARTIFACTS / '04_final_model' / 'v5_pair_smoothing' / 'submission_v5_H_meet_ridge.csv'
 sample_submission = pd.read_csv(DATA_DIR / 'sample_submission.csv')
 if final_file.is_file():
     final_sub = pd.read_csv(final_file)
@@ -1202,6 +1257,8 @@ leaderboard = pd.DataFrame([
     ('12', '+ TabM 95% 重训 × 3 种子', np.nan, 76.337),
     ('13', 'v3_plus：+ sklearn HGB', 76.010, 76.334),
     ('15', 'v4：8 个模型（+ cb_gl、HGB 三种子，TabM 重训 5 个种子）', 75.966, 76.298),
+    ('16', 'v5：v4 + 运动员成对平滑', 75.607, 76.089),
+    ('17', 'v6：v5 + 比赛层成对平滑（最终）', 75.575, 76.030),
 ], columns=['实验', '提交', 'CV（嵌套融合 + 交叉拟合第二层）', '公开榜'])
 display(leaderboard.set_index('实验'))
 '''
@@ -1210,7 +1267,7 @@ nb04 = [
     md('''
     # 04 · 最终模型与提交
 
-    **最终方案**（实验 15，提交文件 `submission_final_v4_final.csv`）：五折交叉验证 **75.966**，公开榜 **76.298**，两者都是全部提交中最好的；2026-10-17 时公开榜第 1。
+    **最终方案**（实验 15 的 8 个模型 + 实验 16–17 的成对平滑，提交文件 `submission_v5_H_meet_ridge.csv`）：交叉拟合 **75.575**，公开榜 **76.030**。成对平滑之前的版本（实验 15，`submission_final_v4_final.csv`）为 75.966 / 76.298。
 
     | 步骤 | 内容 |
     |---|---|
@@ -1220,11 +1277,13 @@ nb04 = [
     | 测试预测 | 树模型在全部 105,000 行上重训：轮数 = CV 平均最佳轮数 × 1.2，cb_rel、cb_gl 用学习率 0.03。TabM 和 HGB 在 95% / 全部数据上重训（内部早停）。多个种子平均 |
     | 融合 | 全局 NNLS；用五折嵌套给出诚实的分数 |
     | 第二层 | 双胞胎（01）+ S3 同一运动员残差平滑（05），按「性别 + 国籍 + 州」分两半交叉拟合 |
+    | 成对平滑 | 在第二层之后：近似同一运动员的成对平滑，再做同一场比赛内的成对平滑（第 5 节）；同样分两半交叉拟合，不重训模型 |
 
-    它由三个实验逐步完成，后一个复用前一个的结果：
+    它由下面几个实验逐步完成，后一个复用前一个的结果：
     - 实验 11：6 个模型；
     - 实验 12：更多全量重训种子；
     - 实验 15：加入 cb_gl 与 HGB 的三种子版本。
+    - 实验 16–17：两步成对相似度平滑（只读取保存的预测，CPU）。
 
     {NOTEBOOK_MAP}
     '''),
@@ -1234,13 +1293,14 @@ nb04 = [
         'six_models': False,     # 实验 11：6 个模型 × 5 折 × 3 种子 + 全量重训 + 数据清洗实验（GPU，约 2.5 小时）
         'more_seeds': False,     # 实验 12：cb_rel 学习率检查 + 全量重训再加 5 个种子 + TabM 95% 重训（GPU，约 1 小时）
         'eight_models': False,   # 实验 15：cb_gl、HGB 补齐三种子 + 全量重训 → 8 个模型的最终提交（GPU，约 1 小时）
+        'pair_smoothing': False, # 实验 16–17：成对相似度平滑（只用 CPU，建议高 RAM 运行时；需要实验 15 的结果）
     }
     '''),
     code(SETUP),
     md('## 0. 读取数据；打开训练开关时重新生成特征与模型定义（与 02、实验 11 相同的代码）'),
-    raw_code(DATA),
-    gated('TRAINING', FEATURES, env=False, off='没有打开训练开关：不需要重新生成特征，下面只读取已保存的结果。'),
-    gated('TRAINING', FINAL_SHARED, off='没有打开训练开关：不需要模型定义。'),
+    raw_code(DATA + "\nMODEL_TRAINING = any(v for k, v in TRAIN.items() if k != 'pair_smoothing')   # 成对平滑只读取保存的预测"),
+    gated('MODEL_TRAINING', FEATURES, env=False, off='没有打开模型训练开关：不需要重新生成特征，下面只读取已保存的结果。'),
+    gated('MODEL_TRAINING', FINAL_SHARED, off='没有打开模型训练开关：不需要模型定义。'),
     raw_code(RESULT_HELPERS),
     md('''
     ## 1. 6 个模型 × 5 折 × 3 种子 + 全量重训（实验 11）
@@ -1307,18 +1367,42 @@ nb04 = [
     - 嵌套融合 76.395 → 76.351（+ HGB）→ **76.319**（+ cb_gl）；加第二层后 **75.966**，是全部实验中最好的交叉验证分数。
     '''),
     md('''
-    ## 5. 提交文件与公开榜
+    ## 5. 成对相似度平滑（实验 16–17）
+
+    S3 按「性别 + 国籍 + 州 + 出生年」分组取残差均值，但这样的组平均有 8 行，多数不是同一个运动员。这里改为逐对估计「训练行 j 的残差对行 i 有多大参考价值」：
+
+    | 步骤 | 内容 |
+    |---|---|
+    | 候选对 | 实验 16：同性别 + 国籍 + 州（国家已知），出生年相差 ≤ 1；两行都是 x.5 年龄时出生年必须相同。约 1,960 万对 |
+    | 成对模型 | LightGBM 回归 `r_i × r_j / Var(r)`，特征是体重差、年份差、出生年差、联盟 / 装备 / 级别是否相同、候选人数等；预测截断到 ≥ 0 作为权重 |
+    | 汇总 | 按权重汇总邻居残差得到 5 个特征，与 S3 的 13 个特征一起做最小二乘（`A_pair`） |
+    | 比赛层 | 实验 17：在 `A_pair` 的残差上再做一次，候选对改为同一场比赛 × 性别 × 装备（训练行 ≤ 300 的组），5 个特征用岭回归加入（`H_meet_ridge`） |
+    | 交叉拟合 | 与第二层相同的两半；成对模型只用「两行都不在被预测半边」的候选对训练 |
+
+    代码在 `tools/pair_smoothing.py`，只读取实验 15 保存的 OOF 与测试预测，不重训第一层模型。结果目录 `artifacts/04_final_model/v5_pair_smoothing/`。下面的分数从保存的 OOF **重新计算**。
+    '''),
+    gated("TRAIN['pair_smoothing']", PAIR_RUN, env=False),
+    code(SHOW_V5),
+    md('''
+    **结论**：
+    - 运动员成对平滑：75.966 → **75.607**（−0.359），五折、两个半边都改善；公开榜 76.298 → 76.089（−0.209）。
+    - 比赛层成对平滑：再 −0.032（**75.575**），只略高于事先定的 0.03 门槛；公开榜 76.089 → 76.030。到此停止，不再加层。
+    - 实验 16 中没有额外收益的变体（州未知的跨组候选对、岭回归、600 轮、去掉 S3 特征）已从脚本中移除，分数见 `RESULTS.md`。
+    - 验证方式与第二层相同：只对系数和成对模型做两半交叉拟合，不是整条流程的嵌套验证。
+    '''),
+    md('''
+    ## 6. 提交文件与公开榜
 
     公开榜只用约 30% 的测试数据（约 13,500 行），0.05 kg 以内的差异基本是噪声（05），所以选模以交叉验证为准。全量重训的版本没有对应的交叉验证分数。
     '''),
     code(FINAL_FILE_CHECK),
     md('''
-    **Kaggle 最终选择两个提交**（私榜按另外 70% 的测试数据计算）：
+    **提交文件**（私榜按另外 70% 的测试数据计算）：
 
-    1. `artifacts/04_final_model/v4_eight_models/submission_final_v4_final.csv`：交叉验证与公开榜都最好（75.966 / 76.298），主选；
-    2. `artifacts/03_model_selection/model_compare/submission_final_v3_plus_final.csv`：公开榜第二好（76.334），作保险。
+    1. `artifacts/04_final_model/v5_pair_smoothing/submission_v5_H_meet_ridge.csv`：最终提交，交叉拟合与公开榜都最好（75.575 / 76.030）；
+    2. `artifacts/04_final_model/v4_eight_models/submission_final_v4_final.csv`：成对平滑之前的版本（75.966 / 76.298），不依赖后两步后处理，作保险。
 
-    v4 在公开榜上比 v3_plus 好 0.036，与交叉验证上的 0.045 一致。05 的模拟显示，这样的差异在公开榜上反过来的概率只有约 4%。两个文件的副本都在 `submissions/`。
+    两步成对平滑在公开榜上合计 −0.268，交叉拟合上 −0.391：方向一致，公开榜的幅度较小。文件的副本都在 `submissions/`。
     '''),
 ]
 
@@ -1548,7 +1632,7 @@ nb05 = [
     最终模型之后，检查误差还剩在哪里，并记录试过但没有采用的方法：
 
     1. **最终模型的残差**：哪些分组仍有系统偏差？大误差来自哪里？
-    2. **残差的结构 → 第二层**：同一运动员、同一场比赛的残差相关，双胞胎；5 种平滑做法的比较。
+    2. **残差的结构 → 第二层**：同一运动员、同一场比赛的残差相关，双胞胎；5 种平滑做法的比较。之后的成对平滑在 04 第 5 节。
     3. **数据清洗实验**：训练时去掉疑似错误的成绩，会不会更好？
     4. **没有成功的方向**。
     5. **交叉验证与公开榜**：两者是否一致，公开榜有多大噪声。
@@ -1564,7 +1648,7 @@ nb05 = [
     md('''
     ## 1. 最终模型的残差
 
-    残差 = 真实 − 预测（kg），用 04 最终版（实验 15）的五折 OOF：「融合」为 8 个模型的嵌套 NNLS，「加第二层」再加双胞胎和 S3 平滑（交叉拟合）。
+    残差 = 真实 − 预测（kg），用 04 实验 15（v4，成对平滑之前）的五折 OOF：「融合」为 8 个模型的嵌套 NNLS，「加第二层」再加双胞胎和 S3 平滑（交叉拟合）。
     '''),
     code(RESIDUALS),
     md('''
@@ -1605,6 +1689,7 @@ nb05 = [
     - 同一运动员平滑是最有效的一步：实验 08 中 −0.24，公开榜 −0.29 / −0.48。
     - 5 种做法中 **S3（精确 + 出生年 ±1 + 时间衰减，线性组合）最好**，S4 的小 LightGBM 过拟合（+0.21）。最终集成用 S3。
     - 特征里加入运动员历史（H、H2）之后，平滑的增益从 −0.24 降到 −0.13，两者有重叠，但仍然互补。
+    - S3 把同组的行同等对待；实验 16–17 改为逐对估计权重（04 第 5 节），在 S3 之后再降 0.39：75.966 → 75.607 → 75.575。
     '''),
     md('''
     ## 3. 数据清洗实验（实验 11）
@@ -1659,7 +1744,7 @@ nb05 = [
     - **相对力量目标**：DOTS、IPF GL 的 CatBoost 是最强的单模型，与 kg 目标的模型互补。
     - **饱和**：不看成绩的特征到第三轮基本饱和；基于成绩的特征放进模型反而变差，放在模型之后的平滑里效果更好。
     - **选模**：公开榜只有 30% 的测试数据，所以选模以五折交叉验证和同协议的配对比较为准；公开榜只作确认，两者的排序一致。
-    - **最终结果**：v4 的五折交叉验证 75.966，公开榜 76.298（2026-10-17 公开榜第 1）。起点 v1 的交叉验证为 77.775，公开榜 78.0。
+    - **最终结果**：v4 的五折交叉验证 75.966，公开榜 76.298；加两步成对平滑后 75.575 / 76.030（04 第 5 节）。起点 v1 的交叉验证为 77.775，公开榜 78.0。
     '''),
 ]
 

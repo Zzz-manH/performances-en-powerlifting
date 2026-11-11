@@ -1,6 +1,7 @@
 # tools
 
 - `build_notebooks.py`：生成项目的 5 本 notebook。
+- `pair_smoothing.py`：实验 16–17 的成对相似度平滑。只读取 04 保存的 OOF 与测试预测，由 04 第 5 节的 `pair_smoothing` 开关调用，也可以单独运行：`python tools/pair_smoothing.py <项目根目录>`。
 - `cells/*.py`：notebook 中的训练代码，每个文件是一个代码单元格。它们是从在 Colab 上跑过的实验 07–15 原样抽取的，只改了数据路径和结束时的提示文字。
 
 用法：
